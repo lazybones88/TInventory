@@ -12,8 +12,13 @@ export default function RecordsPage() {
   const [kind, setKind] = useState<"all" | "prep" | "ordering">("all");
   const [status, setStatus] = useState<"all" | "draft" | "sent">("all");
   const [open, setOpen] = useState<Sheet | null>(null);
+  const [admin, setAdmin] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => setAdmin(Boolean(data.admin)));
     const wanted = new URLSearchParams(window.location.search).get("id");
     fetch("/api/reports?all=1")
       .then((res) => res.json())
@@ -30,6 +35,35 @@ export default function RecordsPage() {
         }
       });
   }, []);
+
+  async function removeSheet(id: string) {
+    if (!confirm("Delete this record? This cannot be undone.")) return;
+    setBusy(true);
+    const res = await fetch(`/api/reports?id=${id}`, { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) {
+      alert("Could not delete. Sign in as admin first.");
+      return;
+    }
+    setSheets((prev) => prev.filter((sheet) => sheet.id !== id));
+    if (open?.id === id) setOpen(null);
+  }
+
+  async function removeTests() {
+    if (!confirm("Delete all test records and TEST inventory items?")) return;
+    setBusy(true);
+    const res = await fetch("/api/reports?tests=1", { method: "DELETE" });
+    const data = await res.json();
+    setBusy(false);
+    if (!res.ok) {
+      alert("Could not delete tests. Sign in as admin first.");
+      return;
+    }
+    const remaining = await fetch("/api/reports?all=1").then((r) => r.json());
+    setSheets(remaining.sheets || []);
+    setOpen(null);
+    alert(`Deleted ${data.removed || 0} test sheets${data.itemsRemoved ? ` and ${data.itemsRemoved} test items` : ""}.`);
+  }
 
   const visible = useMemo(
     () =>
@@ -78,6 +112,11 @@ export default function RecordsPage() {
               {label}
             </button>
           ))}
+          {admin ? (
+            <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => void removeTests()}>
+              Delete all test records
+            </button>
+          ) : null}
         </div>
 
         {visible.length === 0 ? (
@@ -110,6 +149,16 @@ export default function RecordsPage() {
                     <Link className="btn btn-ghost !min-h-9 !px-3 text-sm" href={openHref(sheet)}>
                       {sheet.status === "draft" ? "Resume" : "Open"}
                     </Link>
+                    {admin ? (
+                      <button
+                        className="btn btn-ghost !min-h-9 !px-3 text-sm text-wine"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void removeSheet(sheet.id)}
+                      >
+                        Delete
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </article>
@@ -117,7 +166,15 @@ export default function RecordsPage() {
           })}
         </div>
 
-        {open ? <SheetDetail sheet={open} onClose={() => setOpen(null)} /> : null}
+        {open ? (
+          <SheetDetail
+            sheet={open}
+            admin={admin}
+            busy={busy}
+            onClose={() => setOpen(null)}
+            onDelete={() => void removeSheet(open.id)}
+          />
+        ) : null}
       </main>
     </>
   );
@@ -129,7 +186,19 @@ function openHref(sheet: Sheet) {
   return `${path}?date=${sheet.date}`;
 }
 
-function SheetDetail({ sheet, onClose }: { sheet: Sheet; onClose: () => void }) {
+function SheetDetail({
+  sheet,
+  admin,
+  busy,
+  onClose,
+  onDelete,
+}: {
+  sheet: Sheet;
+  admin?: boolean;
+  busy?: boolean;
+  onClose: () => void;
+  onDelete?: () => void;
+}) {
   return (
     <div className="card mt-6 overflow-auto p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -140,6 +209,11 @@ function SheetDetail({ sheet, onClose }: { sheet: Sheet; onClose: () => void }) 
           <Link className="btn btn-gold !min-h-9" href={openHref(sheet)}>
             {sheet.status === "draft" ? "Resume" : "Open"}
           </Link>
+          {admin ? (
+            <button className="btn btn-ghost !min-h-9 text-wine" type="button" disabled={busy} onClick={onDelete}>
+              Delete
+            </button>
+          ) : null}
           <button className="btn btn-ghost !min-h-9" type="button" onClick={onClose}>
             Close
           </button>

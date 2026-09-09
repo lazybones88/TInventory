@@ -265,6 +265,11 @@ export async function pgGetReport(id: string) {
   return rows[0] ? asReport(rows[0] as Record<string, unknown>) : null;
 }
 
+export async function pgDeleteReport(id: string) {
+  await pgReady();
+  await sql()`DELETE FROM reports WHERE id = ${id}`;
+}
+
 export async function pgCreateReport(report: Report) {
   await pgReady();
   await sql()`INSERT INTO reports (id, type, date, submitted_at, submitted_by, emailed, email_error, lines)
@@ -299,6 +304,11 @@ export async function pgUpsertDraft(draft: DraftSheet) {
       submitted_by = EXCLUDED.submitted_by,
       lines = EXCLUDED.lines`;
   return draft;
+}
+
+export async function pgDeleteDraftById(id: string) {
+  await pgReady();
+  await sql()`DELETE FROM drafts WHERE id = ${id}`;
 }
 
 export async function pgClearDraft(type: ItemType, date: string) {

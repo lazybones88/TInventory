@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getReport, listReports, listSheets } from "@/lib/store";
+import { isAdmin } from "@/lib/auth";
+import { deleteSheet, deleteTestRecords, getReport, listReports, listSheets } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -18,4 +19,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ sheets });
   }
   return NextResponse.json({ reports: await listReports(type) });
+}
+
+export async function DELETE(request: Request) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Admin only." }, { status: 401 });
+  }
+  const url = new URL(request.url);
+  if (url.searchParams.get("tests") === "1") {
+    const result = await deleteTestRecords();
+    return NextResponse.json({ ok: true, ...result });
+  }
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Record id is required." }, { status: 400 });
+  await deleteSheet(id);
+  return NextResponse.json({ ok: true });
 }

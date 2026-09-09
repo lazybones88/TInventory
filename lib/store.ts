@@ -9,7 +9,9 @@ import {
   pgCreateItem,
   pgCreateRecipe,
   pgCreateReport,
+  pgDeleteDraftById,
   pgDeleteItem,
+  pgDeleteReport,
   pgDeleteRecipe,
   pgGetDraft,
   pgGetItem,
@@ -173,6 +175,49 @@ export async function listReports(type?: string | null) {
 export async function getReport(id: string) {
   if (usingPostgres()) return pgGetReport(id);
   return readFileDb().reports.find((report) => report.id === id) || null;
+}
+
+export async function deleteReport(id: string) {
+  if (usingPostgres()) return pgDeleteReport(id);
+  writeFileDb((db) => {
+    db.reports = db.reports.filter((report) => report.id !== id);
+  });
+}
+
+export async function deleteDraftById(id: string) {
+  if (usingPostgres()) return pgDeleteDraftById(id);
+  writeFileDb((db) => {
+    db.drafts = db.drafts.filter((draft) => draft.id !== id);
+  });
+}
+
+export async function deleteSheet(id: string) {
+  await deleteReport(id);
+  await deleteDraftById(id);
+}
+
+export function isTestSheet(sheet: { submittedBy?: string; lines?: { name?: string }[] }) {
+  const by = (sheet.submittedBy || "").toLowerCase();
+  if (by.includes("test")) return true;
+  return (sheet.lines || []).some((line) => /^test[\s-]/i.test(line.name || ""));
+}
+
+export async function deleteTestRecords() {
+  const sheets = await listSheets();
+  let removed = 0;
+  for (const sheet of sheets) {
+    if (!isTestSheet(sheet)) continue;
+    await deleteSheet(sheet.id);
+    removed += 1;
+  }
+  const items = await listItems();
+  let itemsRemoved = 0;
+  for (const item of items) {
+    if (!/^test[\s-]/i.test(item.name)) continue;
+    await deleteItem(item.id);
+    itemsRemoved += 1;
+  }
+  return { removed, itemsRemoved };
 }
 
 export async function createReport(report: Report) {

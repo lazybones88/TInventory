@@ -14,9 +14,21 @@ export default function RecordsPage() {
   const [open, setOpen] = useState<Sheet | null>(null);
 
   useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("id");
     fetch("/api/reports?all=1")
       .then((res) => res.json())
-      .then((data) => setSheets(data.sheets || []));
+      .then((data) => {
+        const loaded: Sheet[] = data.sheets || [];
+        setSheets(loaded);
+        if (wanted) {
+          const match = loaded.find((sheet) => sheet.id === wanted);
+          if (match) {
+            setKind(match.type);
+            setStatus(match.status);
+            setOpen(match);
+          }
+        }
+      });
   }, []);
 
   const visible = useMemo(

@@ -10,6 +10,16 @@ export function smtpConfigured() {
   return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+export function appUrl() {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (fromEnv) return fromEnv.startsWith("http") ? fromEnv : `https://${fromEnv}`;
+  return "https://tamarasdowntown-inventory.vercel.app";
+}
+
+export function reportUrl(report: Report) {
+  return `${appUrl()}/records?id=${report.id}`;
+}
+
 function formatReport(report: Report) {
   const title =
     report.type === "prep"
@@ -66,6 +76,12 @@ function formatReport(report: Report) {
       <p><strong>Date:</strong> ${report.date}<br/>
       <strong>Submitted:</strong> ${new Date(report.submittedAt).toLocaleString()}<br/>
       <strong>By:</strong> ${report.submittedBy}</p>
+      <p style="margin:20px 0;">
+        <a href="${reportUrl(report)}" style="display:inline-block;background:#7a1f2b;color:#fffaf2;text-decoration:none;padding:12px 20px;border-radius:999px;font-weight:700;">
+          Open this ${report.type === "ordering" ? "order" : "prep"} sheet
+        </a>
+      </p>
+      <p style="font-size:13px;color:#6b5344;">Or copy this link: ${reportUrl(report)}</p>
       ${overBlock}
       <table cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px;">
         <thead>

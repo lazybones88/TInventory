@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+:root {
+  --cream: #f7f1e6;
+  --cream-deep: #efe4d2;
+  --ink: #2a1b14;
+  --wine: #7a1f2b;
+  --wine-deep: #5c1520;
+  --gold: #c4a35a;
+  --gold-soft: #e6d3a3;
+  --olive: #4f5d3a;
+  --paper: #fffaf2;
+  --muted: #6e5848;
+}
+
+@theme inline {
+  --color-cream: var(--cream);
+  --color-cream-deep: var(--cream-deep);
+  --color-ink: var(--ink);
+  --color-wine: var(--wine);
+  --color-wine-deep: var(--wine-deep);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-olive: var(--olive);
+  --color-paper: var(--paper);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(196, 163, 90, 0.18), transparent 50%),
+    radial-gradient(900px 400px at 100% 0%, rgba(122, 31, 43, 0.12), transparent 45%),
+    var(--cream);
+  color: var(--ink);
+  font-family: var(--font-sans), "Segoe UI", sans-serif;
+}
+
+h1,
+h2,
+h3,
+.serif {
+  font-family: var(--font-serif), Georgia, serif;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input[type="number"] {
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+}
+
+.sheet-input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #d7c7b0;
+  background: #fffdf8;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  color: var(--ink);
+}
+
+.sheet-input:focus {
+  outline: 2px solid var(--gold);
+  border-color: var(--gold);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 48px;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  transition: 0.15s ease;
+}
+
+.btn-wine {
+  background: var(--wine);
+  color: #fffaf2;
+}
+
+.btn-wine:hover {
+  background: var(--wine-deep);
+}
+
+.btn-gold {
+  background: var(--gold);
+  color: #2a1b14;
+}
+
+.btn-gold:hover {
+  filter: brightness(1.05);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid #d7c7b0;
+  color: var(--ink);
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid #eadcc6;
+  box-shadow: 0 10px 30px rgba(42, 27, 20, 0.06);
+  border-radius: 18px;
+}

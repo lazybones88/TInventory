@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { categoriesFor, UNITS, unitLabel } from "@/lib/catalog";
+import { afterPrep, exceedsPar } from "@/lib/par";
 import type { InventoryItem, ItemType, ReportLine } from "@/lib/types";
 import { Modal } from "./Modal";
 
@@ -194,8 +195,12 @@ export function InventorySheet({
 
   function overParItems() {
     return items.filter((item) => {
-      const made = num(row(item.id).madeToday);
-      return type === "prep" && item.par > 0 && made > item.par && !row(item.id).reason.trim();
+      const values = row(item.id);
+      return (
+        type === "prep" &&
+        exceedsPar(item.par, num(values.onHand), num(values.madeToday)) &&
+        !values.reason.trim()
+      );
     });
   }
 
@@ -361,13 +366,14 @@ export function InventorySheet({
               <th className="px-3 py-3">Par {admin ? "(admin)" : ""}</th>
               <th className="px-3 py-3">On hand</th>
               {type === "prep" ? <th className="px-3 py-3">Made today</th> : <th className="px-3 py-3">To order</th>}
+              {type === "prep" ? <th className="px-3 py-3">On hand + made</th> : null}
               {type === "prep" ? <th className="px-3 py-3">Reason if over par</th> : null}
             </tr>
           </thead>
           <tbody className="bg-paper">
             {visible.map((item) => {
               const values = row(item.id);
-              const over = type === "prep" && item.par > 0 && num(values.madeToday) > item.par;
+              const over = type === "prep" && exceedsPar(item.par, num(values.onHand), num(values.madeToday));
               return (
                 <tr key={item.id} className={`border-t border-[#eadcc6] ${over ? "bg-[#f8e4c8]" : ""}`}>
                   <td className="px-3 py-2">
@@ -420,13 +426,19 @@ export function InventorySheet({
                     )}
                   </td>
                   {type === "prep" ? (
+                    <td className="px-3 py-2 font-semibold">
+                      {afterPrep(num(values.onHand), num(values.madeToday))}
+                      {over ? <span className="ml-1 text-xs text-wine">over {item.par}</span> : null}
+                    </td>
+                  ) : null}
+                  {type === "prep" ? (
                     <td className="px-3 py-2">
                       {over ? (
                         <input
                           className="sheet-input"
                           value={values.reason}
                           onChange={(e) => patch(item.id, { reason: e.target.value })}
-                          placeholder="Why over par?"
+                          placeholder="Why is on hand + made over par?"
                         />
                       ) : (
                         <span className="text-muted">—</span>
@@ -443,7 +455,7 @@ export function InventorySheet({
       <div className="grid gap-3 md:hidden">
         {visible.map((item) => {
           const values = row(item.id);
-          const over = type === "prep" && item.par > 0 && num(values.madeToday) > item.par;
+          const over = type === "prep" && exceedsPar(item.par, num(values.onHand), num(values.madeToday));
           return (
             <article key={item.id} className={`card p-4 ${over ? "ring-2 ring-gold" : ""}`}>
               <div className="mb-3 flex items-start justify-between gap-2">
@@ -489,9 +501,15 @@ export function InventorySheet({
                   />
                 </label>
               </div>
+              {type === "prep" ? (
+                <p className="mt-2 text-sm">
+                  On hand + made: <strong>{afterPrep(num(values.onHand), num(values.madeToday))}</strong>
+                  {over ? ` — over par ${item.par}` : ""}
+                </p>
+              ) : null}
               {over ? (
                 <label className="mt-2 block text-sm">
-                  Why over par?
+                  Why is on hand + made over par?
                   <input
                     className="sheet-input mt-1"
                     value={values.reason}
@@ -576,13 +594,14 @@ export function InventorySheet({
       {reasonOpen ? (
         <Modal title="Why did we make over par?" onClose={() => setReasonOpen(false)}>
           <p className="mb-3 text-sm text-muted">
-            Anything made above par needs a reason so the owner can see it on the dated email.
+            If on hand plus made today is over par, add a reason so the owner sees it on the dated email.
           </p>
           <div className="grid gap-3">
             {pendingReasons.map((item) => (
               <label key={item.id} className="text-sm">
                 <span className="font-semibold">
-                  {item.name} — made {row(item.id).madeToday}, par {item.par}
+                  {item.name} — on hand {row(item.id).onHand} + made {row(item.id).madeToday} ={" "}
+                  {afterPrep(num(row(item.id).onHand), num(row(item.id).madeToday))}, par {item.par}
                 </span>
                 <input
                   className="sheet-input mt-1"

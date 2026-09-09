@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { sendReportEmail } from "@/lib/email";
+import { exceedsPar } from "@/lib/par";
 import { applyCountsToItems, clearDraft, createReport } from "@/lib/store";
 import type { Report, ReportLine } from "@/lib/types";
+
+export const maxDuration = 30;
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +19,16 @@ export async function POST(request: Request) {
   }
 
   const missingReasons = lines.filter((line) => {
-    const made = Number(line.madeToday) || 0;
-    const par = Number(line.par) || 0;
-    return type === "prep" && par > 0 && made > par && !String(line.overParReason || "").trim();
+    return (
+      type === "prep" &&
+      exceedsPar(Number(line.par) || 0, Number(line.onHand) || 0, Number(line.madeToday) || 0) &&
+      !String(line.overParReason || "").trim()
+    );
   });
   if (missingReasons.length > 0) {
     return NextResponse.json(
       {
-        error: "A reason is required when you make more than par.",
+        error: "A reason is required when on hand plus made today is over par.",
         items: missingReasons.map((line) => line.name),
       },
       { status: 400 }

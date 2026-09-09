@@ -1,12 +1,13 @@
 import nodemailer from "nodemailer";
+import { afterPrep, exceedsPar } from "./par";
 import type { Report } from "./types";
 
 export function ownerEmail() {
   return process.env.OWNER_EMAIL || "fairhopefood@ymail.com";
 }
 
-function smtpConfigured() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+export function smtpConfigured() {
+  return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
 function formatReport(report: Report) {
@@ -14,15 +15,19 @@ function formatReport(report: Report) {
     report.type === "prep"
       ? "Daily Prep Inventory"
       : "Manager Ordering Sheet";
-  const over = report.lines.filter((l) => l.overParReason);
+  const over = report.lines.filter(
+    (line) =>
+      report.type === "prep" &&
+      exceedsPar(line.par, line.onHand, line.madeToday ?? 0)
+  );
   const rows = report.lines
     .map((line) => {
       const extra =
         report.type === "prep"
-          ? `<td>${line.madeToday ?? 0}</td><td>${(line.onHand + (line.madeToday ?? 0)).toFixed(1)}</td><td>${line.overParReason || "—"}</td>`
+          ? `<td>${line.madeToday ?? 0}</td><td>${afterPrep(line.onHand, line.madeToday ?? 0)}</td><td>${line.overParReason || "—"}</td>`
           : `<td>${line.orderQty ?? 0}</td>`;
       const overClass =
-        report.type === "prep" && (line.madeToday ?? 0) > line.par && line.par > 0
+        report.type === "prep" && exceedsPar(line.par, line.onHand, line.madeToday ?? 0)
           ? ' style="background:#f8e4c8;"'
           : "";
       return `<tr${overClass}>
@@ -38,17 +43,17 @@ function formatReport(report: Report) {
 
   const extraHead =
     report.type === "prep"
-      ? "<th>Made Today</th><th>After Prep</th><th>Over-Par Reason</th>"
+      ? "<th>Made Today</th><th>On Hand + Made</th><th>Over-Par Reason</th>"
       : "<th>To Order</th>";
 
   const overBlock =
     over.length > 0
-      ? `<h3 style="color:#7a1f2b;">Made over par</h3>
+      ? `<h3 style="color:#7a1f2b;">Over par (on hand + made today)</h3>
         <ul>${over
-          .map(
-            (l) =>
-              `<li><strong>${l.name}</strong> — made ${l.madeToday} (par ${l.par}): ${l.overParReason}</li>`
-          )
+          .map((line) => {
+            const total = afterPrep(line.onHand, line.madeToday ?? 0);
+            return `<li><strong>${line.name}</strong> — on hand ${line.onHand} + made ${line.madeToday ?? 0} = ${total} (par ${line.par}): ${line.overParReason || "No reason given"}</li>`;
+          })
           .join("")}</ul>`
       : "";
 
@@ -81,20 +86,24 @@ export async function sendReportEmail(report: Report) {
     return {
       sent: false,
       error:
-        "Email is not configured. Add SMTP settings in .env.local so reports can go to the owner.",
+        "Email is not configured. Add SMTP_USER and SMTP_PASS on Vercel (Yahoo app password for fairhopefood@ymail.com).",
       subject,
       html,
     };
   }
 
+  const port = Number(process.env.SMTP_PORT || 465);
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: Number(process.env.SMTP_PORT || 465) === 465,
+    host: process.env.SMTP_HOST || "smtp.mail.yahoo.com",
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 15000,
+    socketTimeout: 15000,
   });
 
   await transporter.sendMail({

@@ -8,7 +8,7 @@ export default function PrepPage() {
       <InventorySheet
         type="prep"
         title="prep report"
-        subtitle="Fill on-hand and made today. Send when the board is done."
+        subtitle="Save anytime to come back later. Send when the board is done — counts stay stored."
       />
     </>
   );

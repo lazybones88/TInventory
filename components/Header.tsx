@@ -41,6 +41,9 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
           <Link className="btn btn-ghost !min-h-10" href="/recipes">
             Recipes
           </Link>
+          <Link className="btn btn-ghost !min-h-10" href="/records">
+            Records
+          </Link>
           {admin ? (
             <>
               <Link className="btn btn-gold !min-h-10" href="/admin">

@@ -10,7 +10,7 @@ export default function Home() {
         without logging in. Only admin can change pars.
       </p>
 
-      <div className="mt-10 grid gap-4 md:grid-cols-3">
+      <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Link href="/prep" className="card group p-6 transition hover:-translate-y-0.5">
           <p className="text-xs uppercase tracking-[0.18em] text-gold">Prep team</p>
           <h2 className="serif mt-2 text-3xl">Daily inventory</h2>
@@ -31,6 +31,13 @@ export default function Home() {
           <h2 className="serif mt-2 text-3xl">Recipes</h2>
           <p className="mt-2 text-sm text-muted">
             Crab cakes, gumbo, joule, hollandaise, desserts, and the rest of the house book.
+          </p>
+        </Link>
+        <Link href="/records" className="card group p-6 transition hover:-translate-y-0.5">
+          <p className="text-xs uppercase tracking-[0.18em] text-gold">History</p>
+          <h2 className="serif mt-2 text-3xl">Records</h2>
+          <p className="mt-2 text-sm text-muted">
+            See every saved draft and every sent prep or order sheet, with the date and who sent it.
           </p>
         </Link>
       </div>

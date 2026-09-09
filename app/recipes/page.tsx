@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
+import { RECIPE_CATEGORIES } from "@/lib/catalog";
 import type { Recipe } from "@/lib/types";
 
 export default function RecipesPage() {
@@ -16,10 +17,10 @@ export default function RecipesPage() {
       .then((data) => setRecipes(data.recipes || []));
   }, []);
 
-  const categories = useMemo(
-    () => ["All", ...Array.from(new Set(recipes.map((recipe) => recipe.category)))],
-    [recipes]
-  );
+  const categories = useMemo(() => {
+    const extra = recipes.map((recipe) => recipe.category).filter((name) => !RECIPE_CATEGORIES.includes(name as (typeof RECIPE_CATEGORIES)[number]));
+    return ["All", ...RECIPE_CATEGORIES, ...Array.from(new Set(extra))];
+  }, [recipes]);
   const visible = recipes.filter((recipe) => {
     const matchCat = category === "All" || recipe.category === category;
     const matchQ = recipe.name.toLowerCase().includes(query.toLowerCase());
@@ -37,18 +38,13 @@ export default function RecipesPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <div className="flex flex-wrap gap-2">
+          <select className="sheet-input max-w-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
             {categories.map((name) => (
-              <button
-                key={name}
-                type="button"
-                className={`btn !min-h-10 !px-3 text-sm ${category === name ? "btn-wine" : "btn-ghost"}`}
-                onClick={() => setCategory(name)}
-              >
+              <option key={name} value={name}>
                 {name}
-              </button>
+              </option>
             ))}
-          </div>
+          </select>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {visible.map((recipe) => (

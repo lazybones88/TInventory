@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
-import { readDb, updateDb } from "@/lib/store";
+import { createRecipe, listRecipes } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const recipes = [...readDb().recipes].sort(
-    (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-  );
+  const recipes = await listRecipes();
   return NextResponse.json({ recipes, admin: await isAdmin() });
 }
 
@@ -32,8 +30,6 @@ export async function POST(request: Request) {
     createdAt: stamp,
     updatedAt: stamp,
   };
-  updateDb((db) => {
-    db.recipes.push(recipe);
-  });
+  await createRecipe(recipe);
   return NextResponse.json({ recipe });
 }

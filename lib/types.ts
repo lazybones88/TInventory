@@ -8,6 +8,10 @@ export interface InventoryItem {
   unit: string;
   par: number;
   createdAt: string;
+  lastOnHand?: number;
+  lastMadeToday?: number;
+  lastOrderQty?: number;
+  lastSavedAt?: string;
 }
 
 export interface ReportLine {
@@ -30,6 +34,17 @@ export interface Report {
   submittedBy: string;
   emailed: boolean;
   emailError?: string;
+  status?: "sent";
+  lines: ReportLine[];
+}
+
+export interface DraftSheet {
+  id: string;
+  type: ItemType;
+  date: string;
+  updatedAt: string;
+  submittedBy: string;
+  status: "draft";
   lines: ReportLine[];
 }
 
@@ -55,5 +70,6 @@ export interface Recipe {
 export interface Database {
   items: InventoryItem[];
   reports: Report[];
+  drafts: DraftSheet[];
   recipes: Recipe[];
 }

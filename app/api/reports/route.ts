@@ -1,16 +1,21 @@
 import { NextResponse } from "next/server";
-import { isAdmin } from "@/lib/auth";
-import { readDb } from "@/lib/store";
+import { getReport, listReports, listSheets } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  if (!(await isAdmin())) {
-    return NextResponse.json({ error: "Admin only." }, { status: 401 });
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (id) {
+    const report = await getReport(id);
+    if (!report) return NextResponse.json({ error: "Report not found." }, { status: 404 });
+    return NextResponse.json({ report });
   }
-  const type = new URL(request.url).searchParams.get("type");
-  const reports = readDb()
-    .reports.filter((report) => (type ? report.type === type : true))
-    .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-  return NextResponse.json({ reports });
+  const type = url.searchParams.get("type");
+  const all = url.searchParams.get("all");
+  if (all === "1") {
+    const sheets = (await listSheets()).filter((sheet) => (type ? sheet.type === type : true));
+    return NextResponse.json({ sheets });
+  }
+  return NextResponse.json({ reports: await listReports(type) });
 }

@@ -8,7 +8,7 @@ export default function OrderingPage() {
       <InventorySheet
         type="ordering"
         title="order report"
-        subtitle="On-hand fills a suggested order quantity. Change it if the truck needs more or less."
+        subtitle="Save the order sheet and come back later, or send it when buying is done."
       />
     </>
   );

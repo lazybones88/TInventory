@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
+import { RECIPE_CATEGORIES, unitLabel } from "@/lib/catalog";
 import type { InventoryItem, Recipe, Report } from "@/lib/types";
 
 type Tab = "pars" | "records" | "recipes";
@@ -151,7 +152,7 @@ export default function AdminPage() {
                       <div className="font-semibold">{item.name}</div>
                       <div className="text-xs text-muted">{item.category}</div>
                     </td>
-                    <td className="px-3 py-2">{item.unit}</td>
+                    <td className="px-3 py-2">{unitLabel(item.unit)}</td>
                     <td className="px-3 py-2">
                       <input
                         className="sheet-input max-w-24"
@@ -245,12 +246,17 @@ export default function AdminPage() {
                   value={recipeDraft.name}
                   onChange={(e) => setRecipeDraft({ ...recipeDraft, name: e.target.value })}
                 />
-                <input
+                <select
                   className="sheet-input"
-                  placeholder="Category"
                   value={recipeDraft.category}
                   onChange={(e) => setRecipeDraft({ ...recipeDraft, category: e.target.value })}
-                />
+                >
+                  {RECIPE_CATEGORIES.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
                 <input
                   className="sheet-input"
                   placeholder="Yield"

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendReportEmail } from "@/lib/email";
-import { updateDb } from "@/lib/store";
+import { applyCountsToItems, clearDraft, createReport } from "@/lib/store";
 import type { Report, ReportLine } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -60,9 +60,9 @@ export async function POST(request: Request) {
     report.emailError = emailError;
   }
 
-  updateDb((db) => {
-    db.reports.unshift(report);
-  });
+  await createReport(report);
+  await applyCountsToItems(type, report.lines);
+  await clearDraft(type, date);
 
   return NextResponse.json({
     report,

@@ -10,7 +10,7 @@ export default function Home() {
         without logging in. Only admin can change pars.
       </p>
 
-      <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Link href="/prep" className="card group p-6 transition hover:-translate-y-0.5">
           <p className="text-xs uppercase tracking-[0.18em] text-gold">Prep team</p>
           <h2 className="serif mt-2 text-3xl">Daily inventory</h2>
@@ -19,18 +19,25 @@ export default function Home() {
             emails the owner the dated sheet.
           </p>
         </Link>
+        <Link href="/pull" className="card group p-6 transition hover:-translate-y-0.5">
+          <p className="text-xs uppercase tracking-[0.18em] text-gold">Kitchen</p>
+          <h2 className="serif mt-2 text-3xl">Pull inventory</h2>
+          <p className="mt-2 text-sm text-muted">
+            Ribeyes, cowboys, shrimp, grouper, and the rest. Count what you have, write the pull, add more proteins anytime.
+          </p>
+        </Link>
         <Link href="/ordering" className="card group p-6 transition hover:-translate-y-0.5">
           <p className="text-xs uppercase tracking-[0.18em] text-gold">Managers</p>
           <h2 className="serif mt-2 text-3xl">Ordering</h2>
           <p className="mt-2 text-sm text-muted">
-            Same par sheet, built for purchasing: what we have and how much to order.
+            Order by vendor — City Produce, Buckhead, Fresh Seafood, and the rest. Add new items to a vendor anytime.
           </p>
         </Link>
         <Link href="/recipes" className="card group p-6 transition hover:-translate-y-0.5">
           <p className="text-xs uppercase tracking-[0.18em] text-gold">Kitchen</p>
           <h2 className="serif mt-2 text-3xl">Recipes</h2>
           <p className="mt-2 text-sm text-muted">
-            Crab cakes, gumbo, joule, hollandaise, desserts, and the rest of the house book.
+            The house book from the kitchen. Add a recipe anytime; it also lands on prep if it is new.
           </p>
         </Link>
         <Link href="/records" className="card group p-6 transition hover:-translate-y-0.5">
@@ -38,6 +45,13 @@ export default function Home() {
           <h2 className="serif mt-2 text-3xl">Records</h2>
           <p className="mt-2 text-sm text-muted">
             See every saved draft and every sent prep or order sheet, with the date and who sent it.
+          </p>
+        </Link>
+        <Link href="/prices" className="card group p-6 transition hover:-translate-y-0.5">
+          <p className="text-xs uppercase tracking-[0.18em] text-gold">Vendors</p>
+          <h2 className="serif mt-2 text-3xl">Prices</h2>
+          <p className="mt-2 text-sm text-muted">
+            Email each vendor for this month&apos;s spreadsheet, compare costs, and keep a Price Record when anything changes.
           </p>
         </Link>
       </div>

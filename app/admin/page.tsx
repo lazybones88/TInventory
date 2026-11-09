@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
-import { RECIPE_CATEGORIES, unitLabel } from "@/lib/catalog";
-import type { InventoryItem, Recipe, Report } from "@/lib/types";
+import { VendorBook } from "@/components/VendorBook";
+import { RECIPE_CATEGORIES, unitLabel, VENDORS, vendorsFrom } from "@/lib/catalog";
+import { sheetLabel, type InventoryItem, type Recipe, type Report } from "@/lib/types";
 
-type Tab = "pars" | "records" | "recipes";
+type Tab = "pars" | "vendors" | "records" | "recipes";
 
 export default function AdminPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<Tab>("pars");
+  const [tab, setTab] = useState<Tab>("vendors");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -34,6 +35,10 @@ export default function AdminPage() {
         if (!data.admin) router.replace("/admin/login");
         else setReady(true);
       });
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    if (wanted === "vendors" || wanted === "records" || wanted === "recipes" || wanted === "pars") {
+      setTab(wanted);
+    }
   }, [router]);
 
   useEffect(() => {
@@ -48,6 +53,16 @@ export default function AdminPage() {
       .then((res) => res.json())
       .then((data) => setRecipes(data.recipes || []));
   }, [ready]);
+
+  async function saveVendor(item: InventoryItem, vendor: string) {
+    const res = await fetch(`/api/items/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vendor }),
+    });
+    const data = await res.json();
+    if (data.item) setItems((prev) => prev.map((entry) => (entry.id === item.id ? data.item : entry)));
+  }
 
   async function savePar(item: InventoryItem, par: string) {
     const value = Number(par);
@@ -111,11 +126,30 @@ export default function AdminPage() {
 
   return (
     <>
-      <Header title="Admin" subtitle="Edit pars, review dated records, and manage recipes." />
+      <Header title="Admin" subtitle="Vendor contacts, pars, records, and recipes." />
       <main className="mx-auto max-w-6xl px-4 py-6">
+        {tab !== "vendors" ? (
+          <button
+            type="button"
+            className="card mb-5 w-full p-4 text-left"
+            onClick={() => {
+              setTab("vendors");
+              const url = new URL(window.location.href);
+              url.searchParams.set("tab", "vendors");
+              window.history.replaceState({}, "", url);
+            }}
+          >
+            <p className="text-xs uppercase tracking-[0.18em] text-gold">Vendor contacts</p>
+            <h2 className="serif text-3xl">Names, phones, and emails</h2>
+            <p className="mt-1 text-sm text-muted">
+              Open the vendor cards — City Produce, Buckhead Meat, Fresh Seafood, and the rest.
+            </p>
+          </button>
+        ) : null}
         <div className="mb-5 flex flex-wrap gap-2">
           {(
             [
+              ["vendors", "Vendor contacts"],
               ["pars", "Pars & items"],
               ["records", "Dated records"],
               ["recipes", "Recipes"],
@@ -124,13 +158,20 @@ export default function AdminPage() {
             <button
               key={id}
               type="button"
-              className={`btn ${tab === id ? "btn-wine" : "btn-ghost"}`}
-              onClick={() => setTab(id)}
+              className={`btn ${tab === id ? "btn-wine" : id === "vendors" ? "btn-gold" : "btn-ghost"}`}
+              onClick={() => {
+                setTab(id);
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", id);
+                window.history.replaceState({}, "", url);
+              }}
             >
               {label}
             </button>
           ))}
         </div>
+
+        {tab === "vendors" ? <VendorBook /> : null}
 
         {tab === "pars" ? (
           <div className="overflow-hidden rounded-2xl border border-[#eadcc6]">
@@ -139,6 +180,7 @@ export default function AdminPage() {
                 <tr>
                   <th className="px-3 py-3">Type</th>
                   <th className="px-3 py-3">Item</th>
+                  <th className="px-3 py-3">Vendor</th>
                   <th className="px-3 py-3">Unit</th>
                   <th className="px-3 py-3">Par</th>
                   <th className="px-3 py-3"></th>
@@ -151,6 +193,28 @@ export default function AdminPage() {
                     <td className="px-3 py-2">
                       <div className="font-semibold">{item.name}</div>
                       <div className="text-xs text-muted">{item.category}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {item.type === "ordering" ? (
+                        <select
+                          className="sheet-input min-w-44"
+                          value={item.vendor || ""}
+                          onChange={(e) => void saveVendor(item, e.target.value)}
+                        >
+                          <option value="">Unassigned</option>
+                          {Array.from(
+                            new Set([...VENDORS, ...vendorsFrom(items.filter((entry) => entry.type === "ordering")), item.vendor || ""].filter(Boolean))
+                          ).map(
+                            (name) => (
+                              <option key={name} value={name}>
+                                {name}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2">{unitLabel(item.unit)}</td>
                     <td className="px-3 py-2">
@@ -187,7 +251,12 @@ export default function AdminPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="serif text-2xl">
-                      {report.type === "prep" ? "Prep inventory" : "Ordering"} · {report.date}
+                      {sheetLabel(report.type)} · {report.date}
+                      {report.type === "prep" && report.shift === "night"
+                        ? " · Night shift"
+                        : report.type === "prep"
+                          ? " · Day shift"
+                          : ""}
                     </p>
                     <p className="text-sm text-muted">
                       {new Date(report.submittedAt).toLocaleString()} · {report.submittedBy} ·{" "}

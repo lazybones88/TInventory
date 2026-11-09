@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { sendReportEmail } from "@/lib/email";
 import { exceedsPar } from "@/lib/par";
-import { applyCountsToItems, clearDraft, createReport } from "@/lib/store";
-import type { Report, ReportLine } from "@/lib/types";
+import { countValue } from "@/lib/qty";
+import { applyCountsToItems, clearDraft, createReport, findLatestSent, listVendorSettings } from "@/lib/store";
+import { parseItemType, type Report, type ReportLine, type Shift } from "@/lib/types";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const type = body.type === "ordering" ? "ordering" : "prep";
+  const type = parseItemType(body.type);
   const date = String(body.date || new Date().toISOString().slice(0, 10));
   const submittedBy = String(body.submittedBy || "Staff").trim() || "Staff";
   const lines = Array.isArray(body.lines) ? (body.lines as ReportLine[]) : [];
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   const missingReasons = lines.filter((line) => {
     return (
       type === "prep" &&
-      exceedsPar(Number(line.par) || 0, Number(line.onHand) || 0, Number(line.madeToday) || 0) &&
+      exceedsPar(Number(line.par) || 0, line.onHand, line.madeToday) &&
       !String(line.overParReason || "").trim()
     );
   });
@@ -35,6 +36,20 @@ export async function POST(request: Request) {
     );
   }
 
+  const shift: Shift | undefined = type === "prep" ? (body.shift === "night" ? "night" : "day") : undefined;
+
+  const already = await findLatestSent(type, date, shift);
+  if (already && !already.reopened) {
+    return NextResponse.json(
+      {
+        error: "This sheet was already sent. An admin can reopen it if something needs to change.",
+        alreadySent: true,
+        reportId: already.id,
+      },
+      { status: 409 }
+    );
+  }
+
   const report: Report = {
     id: crypto.randomUUID(),
     type,
@@ -42,36 +57,48 @@ export async function POST(request: Request) {
     submittedAt: new Date().toISOString(),
     submittedBy,
     emailed: false,
+    shift,
     lines: lines.map((line) => ({
       itemId: String(line.itemId || ""),
       name: String(line.name || ""),
       category: String(line.category || ""),
       unit: String(line.unit || ""),
       par: Number(line.par) || 0,
-      onHand: Number(line.onHand) || 0,
-      madeToday: type === "prep" ? Number(line.madeToday) || 0 : undefined,
-      orderQty: type === "ordering" ? Number(line.orderQty) || 0 : undefined,
+      vendor: line.vendor ? String(line.vendor) : undefined,
+      onHand: countValue(line.onHand),
+      madeToday: type === "prep" ? countValue(line.madeToday) : undefined,
+      orderQty: type === "ordering" || type === "pull" ? countValue(line.orderQty) : undefined,
       overParReason: line.overParReason ? String(line.overParReason) : undefined,
     })),
   };
 
   let emailError: string | undefined;
+  let vendorEmails: Awaited<ReturnType<typeof sendReportEmail>>["vendors"] = [];
   try {
-    const result = await sendReportEmail(report);
+    const settings = report.type === "ordering" ? await listVendorSettings() : [];
+    const result = await sendReportEmail(report, settings);
     report.emailed = result.sent;
+    vendorEmails = result.vendors;
     if (!result.sent) emailError = result.error;
+    const vendorFails = result.vendors.filter((entry) => entry.email && !entry.sent && !entry.skipped);
+    if (vendorFails.length) {
+      const note = vendorFails.map((entry) => `${entry.vendor}: ${entry.error || "failed"}`).join("; ");
+      emailError = emailError ? `${emailError} ${note}` : note;
+    }
   } catch (error) {
     emailError = error instanceof Error ? error.message : "Email failed.";
     report.emailError = emailError;
   }
 
+  if (emailError) report.emailError = emailError;
   await createReport(report);
   await applyCountsToItems(type, report.lines);
-  await clearDraft(type, date);
+  await clearDraft(type, date, shift);
 
   return NextResponse.json({
     report,
     emailed: report.emailed,
     emailError,
+    vendorEmails,
   });
 }

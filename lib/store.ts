@@ -1,7 +1,25 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import path from "path";
-import type { Database, DraftSheet, InventoryItem, ItemType, Recipe, Report, ReportLine } from "./types";
-import { seedItems, seedRecipes } from "./seed";
+import type {
+  Database,
+  DraftSheet,
+  InventoryItem,
+  ItemType,
+  PriceRecord,
+  PriceSignal,
+  Recipe,
+  Report,
+  ReportLine,
+  Shift,
+  VendorPriceLine,
+  VendorPriceList,
+  VendorSetting,
+} from "./types";
+import { compareOrderingItems, prepCategoryForRecipe, VENDORS } from "./catalog";
+import { comparePriceLists, matchPriceLines, normalizePriceName } from "./prices";
+import { qtyAmount } from "./qty";
+import { draftId } from "./shift";
+import { seedItems, seedRecipes, syncCatalog, syncRecipes } from "./seed";
 import {
   databaseUrl,
   pgApplyCounts,
@@ -16,15 +34,26 @@ import {
   pgGetDraft,
   pgGetItem,
   pgGetRecipe,
+  pgFindLatestSent,
   pgGetReport,
   pgListDrafts,
   pgListItems,
   pgListRecipes,
   pgListReports,
   pgListSheets,
+  pgReopenReport,
   pgUpdateItem,
   pgUpdateRecipe,
   pgUpsertDraft,
+  pgCreatePriceRecord,
+  pgDeletePriceList,
+  pgDeletePriceRecord,
+  pgListPriceLists,
+  pgListPriceRecords,
+  pgDeleteVendorSetting,
+  pgListVendorSettings,
+  pgUpdateVendorSetting,
+  pgUpsertPriceList,
 } from "./store-pg";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -35,7 +64,7 @@ export function usingPostgres() {
 }
 
 function emptyDb(): Database {
-  return { items: [], reports: [], drafts: [], recipes: [] };
+  return { items: [], reports: [], drafts: [], recipes: [], vendorSettings: [], priceLists: [], priceRecords: [] };
 }
 
 function persist(db: Database) {
@@ -53,7 +82,11 @@ function readFileDb(): Database {
       reports: [],
       drafts: [],
       recipes: seedRecipes(),
+      vendorSettings: [],
+      priceLists: [],
+      priceRecords: [],
     };
+    ensureVendorSettings(seeded.vendorSettings || []);
     persist(seeded);
     return seeded;
   }
@@ -63,6 +96,9 @@ function readFileDb(): Database {
     parsed.reports ||= [];
     parsed.drafts ||= [];
     parsed.recipes ||= [];
+    parsed.vendorSettings ||= [];
+    parsed.priceLists ||= [];
+    parsed.priceRecords ||= [];
     let changed = false;
     if (parsed.items.length === 0) {
       parsed.items = seedItems();
@@ -72,6 +108,9 @@ function readFileDb(): Database {
       parsed.recipes = seedRecipes();
       changed = true;
     }
+    if (syncCatalog(parsed.items).changed) changed = true;
+    if (syncRecipes(parsed.recipes).changed) changed = true;
+    if (ensureVendorSettings(parsed.vendorSettings).changed) changed = true;
     if (changed) persist(parsed);
     return parsed;
   } catch {
@@ -93,7 +132,11 @@ function writeFileDb(mutator: (db: Database) => void) {
 export async function listItems(type?: ItemType | null) {
   if (usingPostgres()) return pgListItems(type);
   const items = readFileDb().items.filter((item) => (type ? item.type === type : true));
-  return items.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  return items.sort((a, b) => {
+    if (a.type !== b.type) return a.type.localeCompare(b.type);
+    if (a.type === "ordering") return compareOrderingItems(a, b);
+    return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
+  });
 }
 
 export async function getItem(id: string) {
@@ -144,6 +187,23 @@ export async function createRecipe(recipe: Recipe) {
     db.recipes.push(recipe);
   });
   return recipe;
+}
+
+export async function ensurePrepForRecipe(name: string, category: string) {
+  const items = await listItems("prep");
+  const match = items.find((item) => item.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (match) return { item: match, created: false };
+  const created = {
+    id: crypto.randomUUID(),
+    type: "prep" as const,
+    name: name.trim(),
+    category: prepCategoryForRecipe(category),
+    unit: "each",
+    par: 0,
+    createdAt: new Date().toISOString(),
+  };
+  await createItem(created);
+  return { item: created, created: true };
 }
 
 export async function updateRecipe(id: string, patch: Partial<Recipe>) {
@@ -220,6 +280,33 @@ export async function deleteTestRecords() {
   return { removed, itemsRemoved };
 }
 
+function sameSheet(report: Report, type: ItemType, date: string, shift?: Shift | null) {
+  if (report.type !== type || report.date !== date) return false;
+  if (type === "prep") return (report.shift || "day") === (shift || "day");
+  return !report.shift;
+}
+
+export async function findLatestSent(type: ItemType, date: string, shift?: Shift | null) {
+  if (usingPostgres()) return pgFindLatestSent(type, date, shift);
+  return (
+    readFileDb()
+      .reports.filter((report) => sameSheet(report, type, date, shift))
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0] || null
+  );
+}
+
+export async function reopenReport(id: string) {
+  if (usingPostgres()) return pgReopenReport(id);
+  let updated: Report | null = null;
+  writeFileDb((db) => {
+    const report = db.reports.find((entry) => entry.id === id);
+    if (!report) return;
+    report.reopened = true;
+    updated = report;
+  });
+  return updated;
+}
+
 export async function createReport(report: Report) {
   if (usingPostgres()) return pgCreateReport(report);
   writeFileDb((db) => {
@@ -235,9 +322,17 @@ export async function listDrafts(type?: ItemType | null) {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export async function getDraft(type: ItemType, date: string) {
-  if (usingPostgres()) return pgGetDraft(type, date);
-  return readFileDb().drafts.find((draft) => draft.type === type && draft.date === date) || null;
+export async function getDraft(type: ItemType, date: string, shift?: Shift | null) {
+  if (usingPostgres()) return pgGetDraft(type, date, shift);
+  const drafts = readFileDb().drafts;
+  if (type === "prep" && shift) {
+    return (
+      drafts.find((draft) => draft.type === type && draft.date === date && draft.shift === shift) ||
+      (shift === "day" ? drafts.find((draft) => draft.type === type && draft.date === date && !draft.shift) : null) ||
+      null
+    );
+  }
+  return drafts.find((draft) => draft.type === type && draft.date === date && !draft.shift) || null;
 }
 
 export async function upsertDraft(input: {
@@ -245,21 +340,30 @@ export async function upsertDraft(input: {
   date: string;
   submittedBy: string;
   lines: ReportLine[];
+  shift?: Shift | null;
 }): Promise<DraftSheet> {
   const draft: DraftSheet = {
-    id: `${input.type}-${input.date}`,
+    id: draftId(input.type, input.date, input.shift),
     type: input.type,
     date: input.date,
     updatedAt: new Date().toISOString(),
     submittedBy: input.submittedBy,
     status: "draft",
+    shift: input.type === "prep" ? input.shift || "day" : undefined,
     lines: input.lines,
   };
   if (usingPostgres()) {
     await pgUpsertDraft(draft);
   } else {
     writeFileDb((db) => {
-      db.drafts = db.drafts.filter((entry) => !(entry.type === input.type && entry.date === input.date));
+      db.drafts = db.drafts.filter((entry) => entry.id !== draft.id);
+      if (draft.type === "prep" && draft.shift) {
+        db.drafts = db.drafts.filter(
+          (entry) => !(entry.type === draft.type && entry.date === draft.date && (entry.shift || "day") === draft.shift)
+        );
+      } else {
+        db.drafts = db.drafts.filter((entry) => !(entry.type === draft.type && entry.date === draft.date && !entry.shift));
+      }
       db.drafts.unshift(draft);
     });
   }
@@ -267,10 +371,14 @@ export async function upsertDraft(input: {
   return draft;
 }
 
-export async function clearDraft(type: ItemType, date: string) {
-  if (usingPostgres()) return pgClearDraft(type, date);
+export async function clearDraft(type: ItemType, date: string, shift?: Shift | null) {
+  if (usingPostgres()) return pgClearDraft(type, date, shift);
   writeFileDb((db) => {
-    db.drafts = db.drafts.filter((draft) => !(draft.type === type && draft.date === date));
+    db.drafts = db.drafts.filter((draft) => {
+      if (draft.type !== type || draft.date !== date) return true;
+      if (type === "prep" && shift) return (draft.shift || "day") !== shift;
+      return false;
+    });
   });
 }
 
@@ -282,15 +390,188 @@ export async function applyCountsToItems(type: ItemType, lines: ReportLine[]) {
       const item = db.items.find((entry) => entry.id === line.itemId);
       if (!item) continue;
       if (type === "prep") {
-        item.lastOnHand = (Number(line.onHand) || 0) + (Number(line.madeToday) || 0);
-        item.lastMadeToday = Number(line.madeToday) || 0;
+        item.lastOnHand = qtyAmount(line.onHand) + qtyAmount(line.madeToday);
+        item.lastMadeToday = qtyAmount(line.madeToday);
       } else {
-        item.lastOnHand = Number(line.onHand) || 0;
-        item.lastOrderQty = Number(line.orderQty) || 0;
+        item.lastOnHand = qtyAmount(line.onHand);
+        item.lastOrderQty = qtyAmount(line.orderQty);
       }
       item.lastSavedAt = savedAt;
     }
   });
+}
+
+function ensureVendorSettings(settings: VendorSetting[]) {
+  let changed = false;
+  const byName = new Map(settings.map((entry) => [entry.name, entry]));
+  for (const name of VENDORS) {
+    const existing = byName.get(name);
+    if (!existing) {
+      settings.push({ name, email: "", contactName: "", phone: "", uploadToken: crypto.randomUUID() });
+      changed = true;
+    } else if (!existing.uploadToken) {
+      existing.uploadToken = crypto.randomUUID();
+      changed = true;
+    }
+  }
+  return { changed };
+}
+
+export async function listVendorSettings() {
+  if (usingPostgres()) return pgListVendorSettings();
+  const db = readFileDb();
+  ensureVendorSettings(db.vendorSettings || []);
+  return [...(db.vendorSettings || [])];
+}
+
+export async function updateVendorSetting(name: string, patch: Partial<VendorSetting>) {
+  if (usingPostgres()) return pgUpdateVendorSetting(name, patch);
+  let updated: VendorSetting | null = null;
+  writeFileDb((db) => {
+    db.vendorSettings ||= [];
+    ensureVendorSettings(db.vendorSettings);
+    const target = db.vendorSettings.find((entry) => entry.name === name);
+    if (!target) {
+      const created: VendorSetting = {
+        contactName: "",
+        phone: "",
+        email: "",
+        uploadToken: crypto.randomUUID(),
+        ...patch,
+        name,
+      };
+      db.vendorSettings.push(created);
+      updated = created;
+      return;
+    }
+    Object.assign(target, patch);
+    updated = target;
+  });
+  return updated;
+}
+
+export async function deleteVendorSetting(name: string) {
+  if ((VENDORS as readonly string[]).includes(name)) return false;
+  if (usingPostgres()) return pgDeleteVendorSetting(name);
+  writeFileDb((db) => {
+    db.vendorSettings = (db.vendorSettings || []).filter((entry) => entry.name !== name);
+  });
+  return true;
+}
+
+export async function getVendorByToken(token: string) {
+  const settings = await listVendorSettings();
+  return settings.find((entry) => entry.uploadToken === token) || null;
+}
+
+export async function listPriceLists(vendor?: string | null) {
+  if (usingPostgres()) return pgListPriceLists(vendor);
+  return (readFileDb().priceLists || [])
+    .filter((list) => (vendor ? list.vendor === vendor : true))
+    .sort((a, b) => b.month.localeCompare(a.month) || b.uploadedAt.localeCompare(a.uploadedAt));
+}
+
+export async function listPriceRecords(vendor?: string | null) {
+  if (usingPostgres()) return pgListPriceRecords(vendor);
+  return (readFileDb().priceRecords || [])
+    .filter((record) => (vendor ? record.vendor === vendor : true))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function deletePriceList(id: string) {
+  if (usingPostgres()) return pgDeletePriceList(id);
+  writeFileDb((db) => {
+    db.priceLists = (db.priceLists || []).filter((list) => list.id !== id);
+  });
+}
+
+export async function deletePriceRecord(id: string) {
+  if (usingPostgres()) return pgDeletePriceRecord(id);
+  writeFileDb((db) => {
+    db.priceRecords = (db.priceRecords || []).filter((record) => record.id !== id);
+  });
+}
+
+function previousListFor(lists: VendorPriceList[], vendor: string, month: string) {
+  return lists
+    .filter((list) => list.vendor === vendor && list.month < month)
+    .sort((a, b) => b.month.localeCompare(a.month))[0];
+}
+
+export async function importVendorPrices(input: {
+  vendor: string;
+  month: string;
+  uploadedBy: string;
+  fileName: string;
+  lines: VendorPriceLine[];
+}) {
+  const items = await listItems("ordering");
+  const matched = matchPriceLines(input.lines, items, input.vendor);
+  const lists = await listPriceLists(input.vendor);
+  const previous = previousListFor(lists, input.vendor, input.month);
+  const changes = previous ? comparePriceLists(input.vendor, previous.lines, matched) : [];
+  const list: VendorPriceList = {
+    id: `${input.vendor}-${input.month}`.toLowerCase().replace(/[^a-z0-9-]+/g, "-"),
+    vendor: input.vendor,
+    month: input.month,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: input.uploadedBy,
+    fileName: input.fileName,
+    lines: matched,
+  };
+  let record: PriceRecord | null = null;
+  if (changes.length) {
+    record = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      month: input.month,
+      vendor: input.vendor,
+      uploadedBy: input.uploadedBy,
+      fileName: input.fileName,
+      changes,
+      snapshot: matched,
+    };
+  }
+  if (usingPostgres()) {
+    await pgUpsertPriceList(list);
+    if (record) await pgCreatePriceRecord(record);
+  } else {
+    writeFileDb((db) => {
+      db.priceLists = (db.priceLists || []).filter((entry) => !(entry.vendor === list.vendor && entry.month === list.month));
+      db.priceLists.unshift(list);
+      if (record) {
+        db.priceRecords ||= [];
+        db.priceRecords.unshift(record);
+      }
+    });
+  }
+  return { list, record, changes, previousMonth: previous?.month || null };
+}
+
+export async function priceSignals() {
+  const lists = await listPriceLists();
+  const latestByVendor = new Map<string, VendorPriceList>();
+  for (const list of lists) {
+    const current = latestByVendor.get(list.vendor);
+    if (!current || list.month > current.month) latestByVendor.set(list.vendor, list);
+  }
+  const signals: Record<string, PriceSignal> = {};
+  for (const [vendor, latest] of latestByVendor) {
+    const previous = previousListFor(lists, vendor, latest.month);
+    const prevMap = new Map((previous?.lines || []).map((line) => [normalizePriceName(line.name), line]));
+    for (const line of latest.lines) {
+      if (!line.itemId) continue;
+      const before = prevMap.get(normalizePriceName(line.name));
+      let direction: PriceSignal["direction"] = previous ? "same" : null;
+      if (before && before.price !== line.price) direction = line.price > before.price ? "up" : "down";
+      signals[line.itemId] = {
+        current: line.price,
+        previous: before?.price ?? null,
+        direction,
+      };
+    }
+  }
+  return signals;
 }
 
 export async function listSheets() {

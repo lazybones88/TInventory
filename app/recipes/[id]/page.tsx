@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
+import { RecipeAdminBar } from "@/components/RecipeAdminBar";
+import { isAdmin } from "@/lib/auth";
 import { getRecipe } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -9,14 +11,18 @@ export default async function RecipeDetail({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const recipe = await getRecipe(id);
   if (!recipe) notFound();
+  const admin = await isAdmin();
 
   return (
     <>
       <Header title={recipe.name} subtitle={`${recipe.category} · Yield ${recipe.yield} · ${recipe.prepTime}`} />
       <article className="mx-auto max-w-3xl px-4 py-8">
-        <Link href="/recipes" className="text-sm text-wine">
-          ← Back to recipes
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link href="/recipes" className="text-sm text-wine">
+            ← Back to recipes
+          </Link>
+          {admin ? <RecipeAdminBar id={recipe.id} name={recipe.name} /> : null}
+        </div>
         <p className="mt-4 text-lg text-muted">{recipe.description}</p>
         <section className="card mt-6 p-5">
           <h2 className="serif text-3xl">Ingredients</h2>

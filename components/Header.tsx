@@ -35,6 +35,9 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
           <Link className="btn btn-ghost !min-h-10" href="/prep">
             Prep
           </Link>
+          <Link className="btn btn-ghost !min-h-10" href="/pull">
+            Pull
+          </Link>
           <Link className="btn btn-ghost !min-h-10" href="/ordering">
             Ordering
           </Link>
@@ -44,8 +47,14 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
           <Link className="btn btn-ghost !min-h-10" href="/records">
             Records
           </Link>
+          <Link className="btn btn-ghost !min-h-10" href="/prices">
+            Prices
+          </Link>
           {admin ? (
             <>
+              <Link className="btn btn-ghost !min-h-10" href="/admin?tab=vendors">
+                Vendors
+              </Link>
               <Link className="btn btn-gold !min-h-10" href="/admin">
                 Admin
               </Link>

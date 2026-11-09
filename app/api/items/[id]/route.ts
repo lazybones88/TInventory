@@ -15,6 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
   if (typeof body.category === "string" && body.category.trim()) patch.category = body.category.trim();
   if (typeof body.unit === "string" && body.unit.trim()) patch.unit = body.unit.trim();
+  if (typeof body.vendor === "string") patch.vendor = body.vendor.trim();
   if (admin && body.par !== undefined) {
     const par = Number(body.par);
     if (Number.isFinite(par) && par >= 0) patch.par = par;

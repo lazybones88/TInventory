@@ -4,7 +4,7 @@ import { InventorySheet } from "@/components/InventorySheet";
 export default function PrepPage() {
   return (
     <>
-      <Header title="Prep inventory" subtitle="No login needed. Pars are locked unless you are admin." />
+      <Header title="Prep inventory" subtitle="Pick day or night. Each shift keeps its own counts." />
       <InventorySheet
         type="prep"
         title="prep report"

@@ -28,7 +28,7 @@ export default function AdminLoginPage() {
 
   return (
     <>
-      <Header title="Admin login" subtitle="Only admin can change pars, delete items, and edit the recipe book." />
+      <Header title="Admin login" subtitle="Admin can change pars and delete items, recipes, and records." />
       <form onSubmit={login} className="card mx-auto mt-10 max-w-md p-6">
         <label className="block text-sm">
           Username

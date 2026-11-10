@@ -131,8 +131,8 @@ export function VendorBook() {
   return (
     <div>
       <p className="mb-4 max-w-3xl text-sm text-muted">
-        Contact book for each house. The owner always gets the full order. If a vendor has an email,
-        Send also emails them — only their products and quantities, not anyone else&apos;s order.
+        Contact book for each house. Send one vendor at a time. The owner gets that house&apos;s
+        inventory, and if they have an email they also get only their own order.
       </p>
 
       <div className="card mb-5 p-4">

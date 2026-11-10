@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { VendorBook } from "@/components/VendorBook";
-import { RECIPE_CATEGORIES, unitLabel, VENDORS, vendorsFrom } from "@/lib/catalog";
+import { orderVendor, RECIPE_CATEGORIES, unitLabel, VENDORS, vendorsFrom } from "@/lib/catalog";
 import { sheetLabel, type InventoryItem, type Recipe, type Report } from "@/lib/types";
 
 type Tab = "pars" | "vendors" | "records" | "recipes";
@@ -251,7 +251,7 @@ export default function AdminPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="serif text-2xl">
-                      {sheetLabel(report.type)} · {report.date}
+                      {sheetLabel(report.type, orderVendor(report))} · {report.date}
                       {report.type === "prep" && report.shift === "night"
                         ? " · Night shift"
                         : report.type === "prep"

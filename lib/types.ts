@@ -6,9 +6,9 @@ export function parseItemType(value: unknown, fallback: ItemType = "prep"): Item
   return fallback;
 }
 
-export function sheetLabel(type: ItemType | string) {
+export function sheetLabel(type: ItemType | string, vendor?: string) {
   if (type === "pull") return "Pull inventory";
-  if (type === "ordering") return "Ordering";
+  if (type === "ordering") return vendor?.trim() || "Ordering";
   return "Prep inventory";
 }
 
@@ -50,6 +50,7 @@ export interface Report {
   emailError?: string;
   status?: "sent";
   shift?: Shift;
+  vendor?: string;
   reopened?: boolean;
   lines: ReportLine[];
 }

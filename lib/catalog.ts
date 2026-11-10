@@ -125,6 +125,12 @@ export function itemVendor(item: { vendor?: string }) {
   return item.vendor?.trim() || UNASSIGNED_VENDOR;
 }
 
+export function orderVendor(sheet: { vendor?: string; lines?: { vendor?: string }[] }) {
+  if (sheet.vendor?.trim()) return sheet.vendor.trim();
+  const names = [...new Set((sheet.lines || []).map((line) => itemVendor(line)))];
+  return names.length === 1 ? names[0] : "";
+}
+
 export function vendorsFrom(items: { vendor?: string }[]) {
   const found = new Set(items.map((item) => itemVendor(item)));
   const known = VENDORS.filter((vendor) => found.has(vendor));

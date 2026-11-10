@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { sendReportEmail } from "@/lib/email";
 import { exceedsPar } from "@/lib/par";
 import { countValue } from "@/lib/qty";
-import { applyCountsToItems, clearDraft, createReport, findLatestSent, listVendorSettings } from "@/lib/store";
+import { itemVendor } from "@/lib/catalog";
+import { applyCountsToItems, clearDraft, clearSentVendorDraft, createReport, findLatestSent, listVendorSettings } from "@/lib/store";
 import { parseItemType, type Report, type ReportLine, type Shift } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -37,12 +38,20 @@ export async function POST(request: Request) {
   }
 
   const shift: Shift | undefined = type === "prep" ? (body.shift === "night" ? "night" : "day") : undefined;
+  const vendor = type === "ordering" ? String(body.vendor || "").trim() : "";
+  if (type === "ordering" && !vendor) {
+    return NextResponse.json({ error: "Pick a vendor first. Send one house at a time." }, { status: 400 });
+  }
+  const scopedLines = type === "ordering" ? lines.filter((line) => itemVendor(line) === vendor) : lines;
+  if (type === "ordering" && scopedLines.length === 0) {
+    return NextResponse.json({ error: `No ${vendor} items to send.` }, { status: 400 });
+  }
 
-  const already = await findLatestSent(type, date, shift);
+  const already = await findLatestSent(type, date, shift, vendor || null);
   if (already && !already.reopened) {
     return NextResponse.json(
       {
-        error: "This sheet was already sent. An admin can reopen it if something needs to change.",
+        error: `${vendor || "This sheet"} was already sent. An admin can reopen it if something needs to change.`,
         alreadySent: true,
         reportId: already.id,
       },
@@ -58,7 +67,8 @@ export async function POST(request: Request) {
     submittedBy,
     emailed: false,
     shift,
-    lines: lines.map((line) => ({
+    vendor: vendor || undefined,
+    lines: scopedLines.map((line) => ({
       itemId: String(line.itemId || ""),
       name: String(line.name || ""),
       category: String(line.category || ""),
@@ -93,7 +103,11 @@ export async function POST(request: Request) {
   if (emailError) report.emailError = emailError;
   await createReport(report);
   await applyCountsToItems(type, report.lines);
-  await clearDraft(type, date, shift);
+  if (type === "ordering" && vendor) {
+    await clearSentVendorDraft(type, date, vendor);
+  } else {
+    await clearDraft(type, date, shift);
+  }
 
   return NextResponse.json({
     report,

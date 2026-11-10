@@ -12,7 +12,7 @@ import type {
   VendorPriceList,
   VendorSetting,
 } from "./types";
-import { compareOrderingItems, VENDORS } from "./catalog";
+import { compareOrderingItems, orderVendor, VENDORS } from "./catalog";
 import { qtyAmount } from "./qty";
 
 export function databaseUrl() {
@@ -72,6 +72,7 @@ function asReport(row: Record<string, unknown>): Report {
     emailError: row.email_error ? String(row.email_error) : undefined,
     status: "sent",
     shift: row.shift === "night" || row.shift === "day" ? (row.shift as Shift) : undefined,
+    vendor: row.vendor ? String(row.vendor) : undefined,
     reopened: Boolean(row.reopened),
     lines: parseJson(row.lines) || [],
   };
@@ -132,6 +133,7 @@ async function migrate() {
   )`;
   await db`ALTER TABLE reports ADD COLUMN IF NOT EXISTS shift TEXT`;
   await db`ALTER TABLE reports ADD COLUMN IF NOT EXISTS reopened BOOLEAN DEFAULT FALSE`;
+  await db`ALTER TABLE reports ADD COLUMN IF NOT EXISTS vendor TEXT`;
   await db`CREATE TABLE IF NOT EXISTS drafts (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
@@ -364,23 +366,27 @@ export async function pgDeleteReport(id: string) {
 
 export async function pgCreateReport(report: Report) {
   await pgReady();
-  await sql()`INSERT INTO reports (id, type, date, submitted_at, submitted_by, emailed, email_error, lines, shift, reopened)
+  await sql()`INSERT INTO reports (id, type, date, submitted_at, submitted_by, emailed, email_error, lines, shift, reopened, vendor)
     VALUES (
       ${report.id}, ${report.type}, ${report.date}, ${report.submittedAt}, ${report.submittedBy},
       ${report.emailed}, ${report.emailError || null}, ${JSON.stringify(report.lines)}, ${report.shift || null},
-      ${report.reopened || false}
+      ${report.reopened || false}, ${report.vendor || null}
     )`;
   return report;
 }
 
-export async function pgFindLatestSent(type: ItemType, date: string, shift?: Shift | null) {
+export async function pgFindLatestSent(type: ItemType, date: string, shift?: Shift | null, vendor?: string | null) {
   await pgReady();
   const db = sql();
   const rows =
     type === "prep" && shift
-      ? await db`SELECT * FROM reports WHERE type = ${type} AND date = ${date} AND (shift = ${shift} OR ((shift IS NULL OR shift = '') AND ${shift} = 'day')) ORDER BY submitted_at DESC LIMIT 1`
-      : await db`SELECT * FROM reports WHERE type = ${type} AND date = ${date} AND (shift IS NULL OR shift = '') ORDER BY submitted_at DESC LIMIT 1`;
-  return rows[0] ? asReport(rows[0] as Record<string, unknown>) : null;
+      ? await db`SELECT * FROM reports WHERE type = ${type} AND date = ${date} AND (shift = ${shift} OR ((shift IS NULL OR shift = '') AND ${shift} = 'day')) ORDER BY submitted_at DESC`
+      : await db`SELECT * FROM reports WHERE type = ${type} AND date = ${date} AND (shift IS NULL OR shift = '') ORDER BY submitted_at DESC`;
+  const reports = rows.map((row) => asReport(row as Record<string, unknown>));
+  if (type === "ordering" && vendor) {
+    return reports.find((report) => orderVendor(report) === vendor) || null;
+  }
+  return reports[0] || null;
 }
 
 export async function pgReopenReport(id: string) {

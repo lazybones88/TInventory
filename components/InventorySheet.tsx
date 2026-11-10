@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { categoriesFor, CITY_PRODUCE, compareOrderingItems, groupByCategory, groupByVendor, itemVendor, PULL_CATEGORIES, UNITS, unitLabel, VENDORS, vendorsFrom } from "@/lib/catalog";
+import { categoriesFor, CITY_PRODUCE, compareOrderingItems, groupByCategory, groupByVendor, itemVendor, orderVendor, PULL_CATEGORIES, UNITS, unitLabel, VENDORS, vendorsFrom } from "@/lib/catalog";
 import { afterPrep, exceedsPar } from "@/lib/par";
 import { qtyAmount } from "@/lib/qty";
 import { defaultShift, shiftLabel } from "@/lib/shift";
@@ -112,9 +112,11 @@ export function InventorySheet({
     const qDate = params.get("date");
     const qReport = params.get("report");
     const qShift = params.get("shift");
+    const qVendor = params.get("vendor");
     if (qDate) setDate(qDate);
     if (qReport) setReportId(qReport);
     if (qShift === "day" || qShift === "night") setShift(qShift);
+    if (qVendor) setVendor(qVendor);
   }, []);
 
   useEffect(() => {
@@ -127,12 +129,14 @@ export function InventorySheet({
           fetch(`/api/drafts?type=${type}&date=${date}${type === "prep" ? `&shift=${shift}` : ""}`),
           reportId ? fetch(`/api/reports?id=${reportId}`) : Promise.resolve(null),
           type === "ordering" ? fetch("/api/prices") : Promise.resolve(null),
-          fetch(`/api/reports?sent=1&type=${type}&date=${date}${type === "prep" ? `&shift=${shift}` : ""}`),
+          type === "ordering"
+            ? Promise.resolve(null)
+            : fetch(`/api/reports?sent=1&type=${type}&date=${date}${type === "prep" ? `&shift=${shift}` : ""}`),
         ]);
         const itemsData = await itemsRes.json();
         const draftData = await draftRes.json();
         const reportData = reportRes ? await reportRes.json() : null;
-        const sentData = await sentRes.json();
+        const sentData = sentRes ? await sentRes.json() : {};
         if (cancelled) return;
         const loaded: InventoryItem[] = itemsData.items || [];
         setItems(loaded);
@@ -143,12 +147,14 @@ export function InventorySheet({
         }
 
         const next: Draft = {};
-        const opened = reportData?.report as { submittedBy?: string; date?: string; lines?: ReportLine[]; shift?: Shift; reopened?: boolean; id?: string } | undefined;
+        const opened = reportData?.report as { submittedBy?: string; date?: string; lines?: ReportLine[]; shift?: Shift; reopened?: boolean; id?: string; vendor?: string } | undefined;
         const serverDraft = draftData.draft as { submittedBy?: string; lines?: ReportLine[] } | null;
         const latestSent = sentData?.sent as { id?: string; submittedBy?: string; lines?: ReportLine[] } | undefined;
         setSentId(opened?.id || latestSent?.id || "");
-        setSentLocked(Boolean(sentData?.locked) || Boolean(opened?.id && !opened.reopened));
+        setSentLocked(type === "ordering" ? Boolean(opened?.id && !opened.reopened) : Boolean(sentData?.locked) || Boolean(opened?.id && !opened.reopened));
         if (opened?.lines?.length) {
+          const openedVendor = orderVendor(opened);
+          if (openedVendor) setVendor(openedVendor);
           setSubmittedBy(opened.submittedBy || "");
           if (opened.date) setDate(opened.date);
           if ((opened.shift === "day" || opened.shift === "night") && opened.shift !== shift) {
@@ -231,6 +237,26 @@ export function InventorySheet({
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  useEffect(() => {
+    if (type !== "ordering") return;
+    if (vendor === "All") {
+      setSentLocked(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/reports?sent=1&type=ordering&date=${date}&vendor=${encodeURIComponent(vendor)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setSentLocked(Boolean(data.locked));
+        if (data.sent?.id) setSentId(data.sent.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [type, vendor, date]);
+
   const categoryOptions = useMemo(() => {
     const preset = categoriesFor(type);
     const extra = items.map((item) => item.category).filter((name) => !preset.includes(name));
@@ -294,6 +320,11 @@ export function InventorySheet({
     });
   }
 
+  function sendLines() {
+    if (type !== "ordering" || vendor === "All") return lines();
+    return lines().filter((line) => itemVendor(line) === vendor);
+  }
+
   function overParItems() {
     return items.filter((item) => {
       const values = row(item.id);
@@ -336,6 +367,10 @@ export function InventorySheet({
   }
 
   async function send() {
+    if (type === "ordering" && vendor === "All") {
+      setNotice({ title: "Pick a vendor", text: "Open one vendor, then send. Each house goes out as its own inventory.", kind: "bad" });
+      return;
+    }
     const missing = overParItems();
     if (missing.length) {
       setPendingReasons(missing);
@@ -355,8 +390,9 @@ export function InventorySheet({
         type,
         date,
         submittedBy: who(type, submittedBy),
-        lines: lines(),
+        lines: sendLines(),
         ...(type === "prep" ? { shift } : {}),
+        ...(type === "ordering" && vendor !== "All" ? { vendor } : {}),
       }),
     });
     const data = await res.json();
@@ -375,7 +411,10 @@ export function InventorySheet({
       }
       return;
     }
-    localStorage.removeItem(storageKey(type, date, shift));
+    if (type !== "ordering") {
+      localStorage.removeItem(storageKey(type, date, shift));
+    }
+    const house = type === "ordering" && vendor !== "All" ? vendor : "";
     const when = `${date}${type === "prep" ? ` · ${shiftLabel(shift)}` : ""}`;
     const vendorSent = (data.vendorEmails || [])
       .filter((entry: { sent?: boolean; vendor?: string }) => entry.sent && entry.vendor)
@@ -383,14 +422,18 @@ export function InventorySheet({
     let text = "";
     if (data.emailed) {
       const vendorFail = data.emailError ? ` ${data.emailError}` : "";
-      text = vendorSent.length
-        ? `Saved and emailed the owner, plus ${vendorSent.join(", ")}, for ${when}. Each vendor only got their own order.${vendorFail}`
-        : `Saved, stored, and emailed to the owner for ${when}. Open Records to see it anytime.${vendorFail}`;
+      text = house
+        ? `Sent ${house} inventory for ${when}. The owner got that sheet${vendorSent.length ? `, and ${vendorSent.join(", ")} got their order` : ""}.${vendorFail}`
+        : vendorSent.length
+          ? `Saved and emailed the owner, plus ${vendorSent.join(", ")}, for ${when}.${vendorFail}`
+          : `Saved, stored, and emailed to the owner for ${when}. Open Records to see it anytime.${vendorFail}`;
     } else {
-      text = `Saved and stored for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.`;
+      text = house
+        ? `Saved ${house} inventory for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.`
+        : `Saved and stored for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.`;
     }
     setStatus(text);
-    setNotice({ title: "Sent", text, kind: "ok" });
+    setNotice({ title: house ? `Sent ${house}` : "Sent", text, kind: "ok" });
     setSentLocked(true);
     if (data.report?.id) setSentId(data.report.id);
     setReasonOpen(false);
@@ -503,6 +546,18 @@ export function InventorySheet({
     window.history.replaceState({}, "", url);
   }
 
+  function pickVendor(name: string) {
+    setVendor(name);
+    const url = new URL(window.location.href);
+    if (name === "All") url.searchParams.delete("vendor");
+    else url.searchParams.set("vendor", name);
+    if (reportId) {
+      url.searchParams.delete("report");
+      setReportId("");
+    }
+    window.history.replaceState({}, "", url);
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 pb-28">
       {notice ? (
@@ -534,9 +589,11 @@ export function InventorySheet({
       ) : null}
       {sentLocked ? (
         <div className="card mb-5 border-[#7a1f2b] bg-[#f8e4c8] p-4">
-          <p className="serif text-2xl">Already sent</p>
+          <p className="serif text-2xl">{type === "ordering" && vendor !== "All" ? `${vendor} already sent` : "Already sent"}</p>
           <p className="mt-1 text-sm">
-            This sheet went out once and cannot be sent twice. Save still works. An admin can reopen it if a correction is needed.
+            {type === "ordering" && vendor !== "All"
+              ? `${vendor} went out once today and cannot be sent twice. Other vendors can still go out. Save still works. An admin can reopen this one if a correction is needed.`
+              : "This sheet went out once and cannot be sent twice. Save still works. An admin can reopen it if a correction is needed."}
           </p>
           {admin ? (
             <button className="btn btn-wine mt-3" type="button" onClick={() => void reopenSent()}>
@@ -577,7 +634,7 @@ export function InventorySheet({
             <button
               type="button"
               className={`btn !min-h-10 !px-3 text-sm ${vendor === "All" ? "btn-wine" : "btn-ghost"}`}
-              onClick={() => setVendor("All")}
+              onClick={() => pickVendor("All")}
             >
               All vendors
             </button>
@@ -586,7 +643,7 @@ export function InventorySheet({
                 key={name}
                 type="button"
                 className={`btn !min-h-10 !px-3 text-sm ${vendor === name ? "btn-wine" : "btn-ghost"}`}
-                onClick={() => setVendor(name)}
+                onClick={() => pickVendor(name)}
               >
                 {name}
               </button>
@@ -841,11 +898,19 @@ export function InventorySheet({
           </button>
           <button
             className="btn btn-wine min-w-48"
-            disabled={sending || saving || sentLocked}
+            disabled={sending || saving || sentLocked || (type === "ordering" && vendor === "All")}
             onClick={send}
             type="button"
           >
-            {sending ? "Sending…" : sentLocked ? "Already sent" : `Send ${title}`}
+            {sending
+              ? "Sending…"
+              : sentLocked
+                ? "Already sent"
+                : type === "ordering" && vendor === "All"
+                  ? "Pick a vendor"
+                  : type === "ordering"
+                    ? `Send ${vendor}`
+                    : `Send ${title}`}
           </button>
         </div>
       </div>

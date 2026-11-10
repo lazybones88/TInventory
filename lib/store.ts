@@ -15,7 +15,7 @@ import type {
   VendorPriceList,
   VendorSetting,
 } from "./types";
-import { compareOrderingItems, prepCategoryForRecipe, VENDORS } from "./catalog";
+import { compareOrderingItems, itemVendor, orderVendor, prepCategoryForRecipe, VENDORS } from "./catalog";
 import { comparePriceLists, matchPriceLines, normalizePriceName } from "./prices";
 import { qtyAmount } from "./qty";
 import { draftId } from "./shift";
@@ -286,13 +286,34 @@ function sameSheet(report: Report, type: ItemType, date: string, shift?: Shift |
   return !report.shift;
 }
 
-export async function findLatestSent(type: ItemType, date: string, shift?: Shift | null) {
-  if (usingPostgres()) return pgFindLatestSent(type, date, shift);
+export async function findLatestSent(type: ItemType, date: string, shift?: Shift | null, vendor?: string | null) {
+  if (usingPostgres()) return pgFindLatestSent(type, date, shift, vendor);
   return (
     readFileDb()
-      .reports.filter((report) => sameSheet(report, type, date, shift))
+      .reports.filter((report) => {
+        if (!sameSheet(report, type, date, shift)) return false;
+        if (type === "ordering" && vendor) return orderVendor(report) === vendor;
+        return true;
+      })
       .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0] || null
   );
+}
+
+export async function clearSentVendorDraft(type: ItemType, date: string, vendor: string) {
+  const draft = await getDraft(type, date);
+  if (!draft) return;
+  const remaining = draft.lines.filter((line) => itemVendor(line) !== vendor);
+  if (!remaining.length) {
+    await clearDraft(type, date);
+    return;
+  }
+  await upsertDraft({
+    type,
+    date,
+    submittedBy: draft.submittedBy,
+    lines: remaining,
+    shift: draft.shift,
+  });
 }
 
 export async function reopenReport(id: string) {

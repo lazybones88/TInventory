@@ -17,7 +17,8 @@ export async function GET(request: Request) {
   const date = url.searchParams.get("date");
   const shift = url.searchParams.get("shift") as Shift | null;
   if (url.searchParams.get("sent") === "1" && typeParam && date) {
-    const sent = await findLatestSent(parseItemType(typeParam), date, shift);
+    const vendor = url.searchParams.get("vendor");
+    const sent = await findLatestSent(parseItemType(typeParam), date, shift, vendor);
     return NextResponse.json({ sent, locked: Boolean(sent && !sent.reopened) });
   }
   const all = url.searchParams.get("all");

@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { CITY_PRODUCE, groupByCategory, groupByVendor, itemVendor, PULL_CATEGORIES, sortCityProduce, UNASSIGNED_VENDOR } from "./catalog";
+import { CITY_PRODUCE, groupByCategory, groupByVendor, itemVendor, orderVendor, PULL_CATEGORIES, sortCityProduce, UNASSIGNED_VENDOR } from "./catalog";
 import { afterPrep, exceedsPar } from "./par";
 import { hasQty, qtyText } from "./qty";
 import { shiftLabel } from "./shift";
@@ -91,11 +91,11 @@ function formatVendorOrder(report: Report, vendor: string, lines: Report["lines"
           .join("")}</tbody>
       </table>`;
   return {
-    subject: `Tamara's Downtown — Order for ${vendor} — ${report.date}`,
+    subject: `Tamara's Downtown — ${vendor} inventory — ${report.date}`,
     html: `<div style="font-family:Georgia,serif;color:#2c1810;max-width:640px;">
       <h1 style="color:#7a1f2b;margin-bottom:4px;">Tamara's Downtown</h1>
       <p style="margin-top:0;color:#6b5344;">104 N Section St, Fairhope, AL</p>
-      <h2 style="margin-bottom:4px;">Order for ${vendor}</h2>
+      <h2 style="margin-bottom:4px;">${vendor} inventory</h2>
       <p><strong>Date:</strong> ${report.date}<br/>
       <strong>From:</strong> ${report.submittedBy}</p>
       <p>Please fill the items below. This list is only ${vendor}'s order — it does not include other vendors.</p>
@@ -111,12 +111,15 @@ function formatVendorOrder(report: Report, vendor: string, lines: Report["lines"
 }
 
 function formatReport(report: Report, settings: VendorSetting[] = []) {
+  const vendorName = orderVendor(report);
   const title =
     report.type === "prep"
       ? "Daily Prep Inventory"
       : report.type === "pull"
         ? "Pull Inventory"
-        : "Manager Ordering Sheet";
+        : vendorName
+          ? `${vendorName} inventory`
+          : "Manager Ordering Sheet";
   const over = report.lines.filter(
     (line) =>
       report.type === "prep" &&

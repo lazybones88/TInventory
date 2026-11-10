@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
-import { CITY_PRODUCE, groupByVendor } from "@/lib/catalog";
+import { CITY_PRODUCE, groupByVendor, orderVendor } from "@/lib/catalog";
 import { shiftLabel } from "@/lib/shift";
 import { sheetLabel, type DraftSheet, type ItemType, type Report, type ReportLine, type Shift } from "@/lib/types";
 
@@ -175,14 +175,11 @@ export default function RecordsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <button type="button" className="text-left" onClick={() => setOpen(sheet)}>
                     <p className="serif text-2xl">
-                      {sheetLabel(sheet.type)} · {sheet.date}
+                      {sheetLabel(sheet.type, orderVendor(sheet))} · {sheet.date}
                       {sheet.type === "prep" && sheet.shift ? ` · ${shiftLabel(sheet.shift)}` : ""}
                     </p>
                     <p className="text-sm text-muted">
                       {new Date(when).toLocaleString()} · {sheet.submittedBy} · {sheet.lines.length} items
-                      {sheet.type === "ordering"
-                        ? ` · ${groupByVendor(sheet.lines).map((group) => group.vendor).join(", ")}`
-                        : ""}
                       {sheet.status === "sent" && "emailed" in sheet
                         ? sheet.emailed
                           ? " · Emailed"
@@ -243,8 +240,10 @@ function openHref(sheet: Sheet) {
   const path = sheet.type === "prep" ? "/prep" : sheet.type === "pull" ? "/pull" : "/ordering";
   const shift =
     sheet.type === "prep" && (sheet.shift === "day" || sheet.shift === "night") ? `&shift=${sheet.shift}` : "";
-  if (sheet.status === "sent") return `${path}?date=${sheet.date}&report=${sheet.id}${shift}`;
-  return `${path}?date=${sheet.date}${shift}`;
+  const vendorName = orderVendor(sheet);
+  const vendor = sheet.type === "ordering" && vendorName ? `&vendor=${encodeURIComponent(vendorName)}` : "";
+  if (sheet.status === "sent") return `${path}?date=${sheet.date}&report=${sheet.id}${shift}${vendor}`;
+  return `${path}?date=${sheet.date}${shift}${vendor}`;
 }
 
 function SheetDetail({
@@ -266,7 +265,7 @@ function SheetDetail({
     <div className="card mt-6 overflow-auto p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="serif text-2xl">
-          {sheet.date} · {sheet.type === "prep" ? "Prep" : sheet.type === "pull" ? "Pull" : "Order"}
+          {sheet.date} · {sheetLabel(sheet.type, orderVendor(sheet))}
           {sheet.type === "prep" && sheet.shift ? ` · ${shiftLabel(sheet.shift)}` : ""} ·{" "}
           {sheet.status === "sent" ? "Sent" : "Saved"}
         </h2>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { VENDORS } from "@/lib/catalog";
 import { fakeCityProduceSms } from "@/lib/fake-produce-text";
-import { openSms } from "@/lib/sms-link";
+import { shareOrderText } from "@/lib/sms-link";
 import type { VendorSetting } from "@/lib/types";
 
 type Draft = {
@@ -137,8 +137,14 @@ export function VendorBook() {
       return;
     }
     const fake = fakeCityProduceSms(phone);
-    openSms(fake.phone, fake.body);
-    setStatus(`Messages should open with a fake ${name} order. Send it from this phone. No email was sent.`);
+    const result = await shareOrderText(fake.phone, fake.body);
+    if (result === "copied") {
+      setStatus(`Copied a fake ${name} order. Paste it in WhatsApp or any chat and send. No email was sent.`);
+    } else if (result === "shared") {
+      setStatus(`Pick a chat app and send the fake ${name} order. No email was sent.`);
+    } else {
+      setStatus("Share cancelled.");
+    }
   }
 
   async function addVendor() {

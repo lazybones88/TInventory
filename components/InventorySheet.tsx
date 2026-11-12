@@ -5,7 +5,7 @@ import { categoriesFor, CITY_PRODUCE, compareOrderingItems, groupByCategory, gro
 import { afterPrep, exceedsPar } from "@/lib/par";
 import { qtyAmount } from "@/lib/qty";
 import { defaultShift, shiftLabel } from "@/lib/shift";
-import { openSms } from "@/lib/sms-link";
+import { shareOrderText } from "@/lib/sms-link";
 import type { InventoryItem, ItemType, PriceSignal, ReportLine, Shift } from "@/lib/types";
 import { Modal } from "./Modal";
 import { PriceFlag } from "./PriceFlag";
@@ -451,7 +451,7 @@ export function InventorySheet({
     let text = "";
     const extra =
       (texted.length ? ` Texted ${texted.join(", ")}.` : "") +
-      (tapText ? ` Tap Text ${tapText.vendor} to open the order on this phone.` : "") +
+      (tapText ? ` Tap Share order to send it from this phone or pad.` : "") +
       (textNeedsPhone ? " Add their phone in Admin → Vendor contacts to text the order." : "");
     if (data.emailed) {
       const vendorFail = data.emailError ? ` ${data.emailError}` : "";
@@ -470,11 +470,11 @@ export function InventorySheet({
       title: house ? `Sent ${house}` : "Sent",
       text,
       kind: "ok",
-      actionLabel: tapText?.vendor ? `Text ${tapText.vendor}` : undefined,
+      actionLabel: tapText?.vendor ? `Share ${tapText.vendor} order` : undefined,
       onAction:
         tapText?.phone && tapText.body
           ? () => {
-              openSms(tapText.phone as string, tapText.body as string);
+              void shareOrderText(tapText.phone as string, tapText.body as string);
             }
           : undefined,
     });

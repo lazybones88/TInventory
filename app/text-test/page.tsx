@@ -1,14 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { Header } from "@/components/Header";
 import { fakeCityProduceSms } from "@/lib/fake-produce-text";
-import { openSms } from "@/lib/sms-link";
+import { copyOrderText, openSms, shareOrderText } from "@/lib/sms-link";
 
 export default function TextTestPage() {
   const { phone, body } = fakeCityProduceSms();
+  const [status, setStatus] = useState("");
 
-  function sendText() {
-    openSms(phone, body);
+  async function share() {
+    const result = await shareOrderText(phone, body);
+    if (result === "shared") setStatus("Pick Messages, WhatsApp, or any chat app, then send. No email goes out.");
+    if (result === "copied") setStatus("Copied. Open your chat app, paste, and send to that number.");
+  }
+
+  async function copy() {
+    await copyOrderText(phone, body);
+    setStatus("Copied. Open your chat app, paste, and send to that number.");
   }
 
   return (
@@ -21,12 +30,22 @@ export default function TextTestPage() {
         <div className="card p-4">
           <p className="text-sm text-muted">To {phone}</p>
           <pre className="mt-3 whitespace-pre-wrap rounded-xl bg-cream-deep p-4 text-sm">{body}</pre>
-          <button className="btn btn-wine mt-4 w-full" type="button" onClick={sendText}>
-            Text this fake order
-          </button>
+          <div className="mt-4 grid gap-2">
+            <button className="btn btn-wine w-full" type="button" onClick={() => void share()}>
+              Share this order
+            </button>
+            <button className="btn btn-gold w-full" type="button" onClick={() => void copy()}>
+              Copy order
+            </button>
+            <button className="btn btn-ghost w-full" type="button" onClick={() => openSms(phone, body)}>
+              Open Messages if this pad can text
+            </button>
+          </div>
           <p className="mt-3 text-sm text-muted">
-            Open this page on your phone, tap the button, then hit send in Messages. No email goes out.
+            On an Android pad with no cell service, tap Share and pick WhatsApp, Messenger, or any chat. Or Copy and
+            paste. Nothing is emailed.
           </p>
+          {status ? <p className="mt-3 rounded-xl bg-gold-soft px-4 py-3 text-sm">{status}</p> : null}
         </div>
       </main>
     </>

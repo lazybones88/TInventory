@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { VENDORS } from "@/lib/catalog";
+import { openSms } from "@/lib/sms-link";
 import type { VendorSetting } from "@/lib/types";
 
 type Draft = {
@@ -36,6 +37,7 @@ export function VendorBook() {
   const [addForm, setAddForm] = useState<Draft>(blank);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState("");
+  const [testing, setTesting] = useState("");
 
   async function load() {
     const res = await fetch("/api/vendors");
@@ -102,6 +104,44 @@ export function VendorBook() {
     setStatus(`Saved ${data.setting.name}.`);
   }
 
+  async function testText(name: string) {
+    const draft = drafts[name];
+    setTesting(name);
+    setStatus("");
+    if (draft) {
+      const saved = await fetch("/api/vendors", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name.trim(),
+          contactName: draft.contactName,
+          phone: draft.phone,
+          email: draft.email,
+          textOrders: true,
+        }),
+      });
+      const savedData = await saved.json();
+      if (!saved.ok || !savedData.setting) {
+        setTesting("");
+        setStatus(savedData.error || "Could not save the number first.");
+        return;
+      }
+      setSettings((prev) => prev.map((entry) => (entry.name === savedData.setting.name ? savedData.setting : entry)));
+      setDrafts((prev) => ({ ...prev, [savedData.setting.name]: fromSetting(savedData.setting) }));
+    }
+    const phone = draft?.phone.trim() || "";
+    setTesting("");
+    if (!phone) {
+      setStatus("Save a phone number first.");
+      return;
+    }
+    openSms(
+      phone,
+      `Tamara's Downtown test: ${name} order texts are working. You will get the real order on this number when we send.`
+    );
+    setStatus(`Messages should open with a test for ${name}. Send it from this phone.`);
+  }
+
   async function addVendor() {
     const name = addForm.name.trim();
     if (!name) {
@@ -135,8 +175,9 @@ export function VendorBook() {
     <div>
       <p className="mb-4 max-w-3xl text-sm text-muted">
         Contact book for each house. Send one vendor at a time. The owner gets that house&apos;s
-        inventory. If they have an email they get their order. Turn on texting and add a phone — City
-        Produce / Coastal Produce is already set to text when you send.
+        inventory. If they have an email they get their order. Turn on texting and add a phone — when
+        you send City Produce, this phone can open a ready-to-send text with the order. No Twilio
+        account needed.
       </p>
 
       <div className="card mb-5 p-4">
@@ -267,14 +308,26 @@ export function VendorBook() {
                     {setting.name === "City Produce" ? " — for Coastal Produce" : ""}
                   </span>
                 </label>
-                <button
-                  className="btn btn-gold"
-                  type="button"
-                  disabled={busy === setting.name}
-                  onClick={() => void save(setting.name)}
-                >
-                  {busy === setting.name ? "Saving…" : "Save contact"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="btn btn-gold"
+                    type="button"
+                    disabled={busy === setting.name || testing === setting.name}
+                    onClick={() => void save(setting.name)}
+                  >
+                    {busy === setting.name ? "Saving…" : "Save contact"}
+                  </button>
+                  {draft.textOrders ? (
+                    <button
+                      className="btn btn-wine"
+                      type="button"
+                      disabled={busy === setting.name || testing === setting.name || !draft.phone.trim()}
+                      onClick={() => void testText(setting.name)}
+                    >
+                      {testing === setting.name ? "Texting…" : "Send test text"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </article>
           );

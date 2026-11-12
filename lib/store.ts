@@ -432,7 +432,7 @@ function ensureVendorSettings(settings: VendorSetting[]) {
         name,
         email: "",
         contactName: "",
-        phone: "",
+        phone: name === CITY_PRODUCE ? "2512232291" : "",
         textOrders: name === CITY_PRODUCE,
         uploadToken: crypto.randomUUID(),
       });
@@ -443,6 +443,11 @@ function ensureVendorSettings(settings: VendorSetting[]) {
         changed = true;
       }
       if (name === CITY_PRODUCE && existing.textOrders == null) {
+        existing.textOrders = true;
+        changed = true;
+      }
+      if (name === CITY_PRODUCE && !existing.phone) {
+        existing.phone = "2512232291";
         existing.textOrders = true;
         changed = true;
       }

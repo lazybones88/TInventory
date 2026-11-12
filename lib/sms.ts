@@ -1,26 +1,21 @@
 import { CITY_PRODUCE, sortCityProduce } from "./catalog";
 import { hasQty, qtyText } from "./qty";
+import { toE164 } from "./sms-link";
 import type { Report } from "./types";
+
+export { openSms, smsHref, toE164 } from "./sms-link";
 
 export type VendorTextResult = {
   vendor: string;
   phone: string;
   sent: boolean;
-  skipped?: "no-phone" | "text-off" | "nothing-ordered" | "not-configured";
+  body?: string;
+  skipped?: "no-phone" | "text-off" | "nothing-ordered" | "not-configured" | "tap-to-send";
   error?: string;
 };
 
 export function smsConfigured() {
   return Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM);
-}
-
-export function toE164(phone: string) {
-  const trimmed = phone.trim();
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  if (trimmed.startsWith("+") && digits.length >= 10) return `+${digits}`;
-  return "";
 }
 
 export function formatVendorSms(report: Report, vendor: string, lines: Report["lines"]) {
@@ -78,14 +73,16 @@ export async function sendVendorOrderText(input: {
   if (!input.lines.some((line) => hasQty(line.orderQty))) {
     return { vendor: input.vendor, phone, sent: false, skipped: "nothing-ordered" };
   }
+  const body = formatVendorSms(input.report, input.vendor, input.lines);
   if (!smsConfigured()) {
-    return { vendor: input.vendor, phone, sent: false, skipped: "not-configured" };
+    return { vendor: input.vendor, phone, sent: false, skipped: "tap-to-send", body };
   }
   try {
-    const result = await sendSms(phone, formatVendorSms(input.report, input.vendor, input.lines));
+    const result = await sendSms(phone, body);
     return {
       vendor: input.vendor,
       phone,
+      body,
       sent: result.sent,
       error: result.sent ? undefined : result.error,
     };
@@ -93,6 +90,7 @@ export async function sendVendorOrderText(input: {
     return {
       vendor: input.vendor,
       phone,
+      body,
       sent: false,
       error: error instanceof Error ? error.message : "Text failed.",
     };

@@ -5,6 +5,7 @@ import { categoriesFor, CITY_PRODUCE, compareOrderingItems, groupByCategory, gro
 import { afterPrep, exceedsPar } from "@/lib/par";
 import { qtyAmount } from "@/lib/qty";
 import { defaultShift, shiftLabel } from "@/lib/shift";
+import { openSms } from "@/lib/sms-link";
 import type { InventoryItem, ItemType, PriceSignal, ReportLine, Shift } from "@/lib/types";
 import { Modal } from "./Modal";
 import { PriceFlag } from "./PriceFlag";
@@ -53,11 +54,15 @@ function Notice({
   title,
   text,
   kind,
+  actionLabel,
+  onAction,
   onClose,
 }: {
   title: string;
   text: string;
   kind: "ok" | "bad";
+  actionLabel?: string;
+  onAction?: () => void;
   onClose: () => void;
 }) {
   return (
@@ -68,9 +73,16 @@ function Notice({
     >
       <p className="serif text-3xl leading-none">{title}</p>
       <p className="mt-2 text-sm">{text}</p>
-      <button className="btn mt-3 !min-h-10 bg-[#fffaf2] text-ink" type="button" onClick={onClose}>
-        OK
-      </button>
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
+        {actionLabel && onAction ? (
+          <button className="btn btn-wine !min-h-10" type="button" onClick={onAction}>
+            {actionLabel}
+          </button>
+        ) : null}
+        <button className="btn !min-h-10 bg-[#fffaf2] text-ink" type="button" onClick={onClose}>
+          OK
+        </button>
+      </div>
     </div>
   );
 }
@@ -98,7 +110,13 @@ export function InventorySheet({
   const [reasonOpen, setReasonOpen] = useState(false);
   const [pendingReasons, setPendingReasons] = useState<InventoryItem[]>([]);
   const [status, setStatus] = useState("");
-  const [notice, setNotice] = useState<{ title: string; text: string; kind: "ok" | "bad" } | null>(null);
+  const [notice, setNotice] = useState<{
+    title: string;
+    text: string;
+    kind: "ok" | "bad";
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
   const [sentLocked, setSentLocked] = useState(false);
   const [sentId, setSentId] = useState("");
   const [sending, setSending] = useState(false);
@@ -423,17 +441,18 @@ export function InventorySheet({
       sent?: boolean;
       vendor?: string;
       phone?: string;
+      body?: string;
       skipped?: string;
       error?: string;
     }[];
     const texted = texts.filter((entry) => entry.sent && entry.vendor).map((entry) => entry.vendor as string);
+    const tapText = texts.find((entry) => entry.phone && entry.body && (entry.skipped === "tap-to-send" || entry.sent));
     const textNeedsPhone = texts.some((entry) => entry.skipped === "no-phone");
-    const textNeedsSetup = texts.some((entry) => entry.skipped === "not-configured");
     let text = "";
     const extra =
       (texted.length ? ` Texted ${texted.join(", ")}.` : "") +
-      (textNeedsPhone ? " Add their phone in Admin → Vendor contacts to text the order." : "") +
-      (textNeedsSetup ? " Add Twilio on Vercel to auto-text the order." : "");
+      (tapText ? ` Tap Text ${tapText.vendor} to open the order on this phone.` : "") +
+      (textNeedsPhone ? " Add their phone in Admin → Vendor contacts to text the order." : "");
     if (data.emailed) {
       const vendorFail = data.emailError ? ` ${data.emailError}` : "";
       text = house
@@ -447,7 +466,18 @@ export function InventorySheet({
         : `Saved and stored for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.${extra}`;
     }
     setStatus(text);
-    setNotice({ title: house ? `Sent ${house}` : "Sent", text, kind: "ok" });
+    setNotice({
+      title: house ? `Sent ${house}` : "Sent",
+      text,
+      kind: "ok",
+      actionLabel: tapText?.vendor ? `Text ${tapText.vendor}` : undefined,
+      onAction:
+        tapText?.phone && tapText.body
+          ? () => {
+              openSms(tapText.phone as string, tapText.body as string);
+            }
+          : undefined,
+    });
     setSentLocked(true);
     if (data.report?.id) setSentId(data.report.id);
     setReasonOpen(false);
@@ -575,7 +605,14 @@ export function InventorySheet({
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 pb-28">
       {notice ? (
-        <Notice title={notice.title} text={notice.text} kind={notice.kind} onClose={() => setNotice(null)} />
+        <Notice
+          title={notice.title}
+          text={notice.text}
+          kind={notice.kind}
+          actionLabel={notice.actionLabel}
+          onAction={notice.onAction}
+          onClose={() => setNotice(null)}
+        />
       ) : null}
       {type === "prep" ? (
         <div className="card mb-5 p-4">

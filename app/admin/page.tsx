@@ -142,8 +142,8 @@ export default function AdminPage() {
             <p className="text-xs uppercase tracking-[0.18em] text-gold">Vendor contacts</p>
             <h2 className="serif text-3xl">Names, phones, and emails</h2>
             <p className="mt-1 text-sm text-muted">
-              Open the vendor cards — City Produce, Buckhead Meat, Fresh Seafood, and the rest. Put
-              Coastal Produce&apos;s cell on City Produce to text their order when you send.
+              Open the vendor cards — City Produce, Buckhead Meat, Fresh Seafood, and the rest. City
+              Produce texts go to the phone on that card.
             </p>
           </button>
         ) : null}

@@ -97,7 +97,7 @@ export async function POST(request: Request) {
       const note = vendorFails.map((entry) => `${entry.vendor}: ${entry.error || "failed"}`).join("; ");
       emailError = emailError ? `${emailError} ${note}` : note;
     }
-    const textFails = result.texts.filter((entry) => !entry.sent && !entry.skipped);
+    const textFails = result.texts.filter((entry) => !entry.sent && !entry.skipped && entry.skipped !== "tap-to-send");
     if (textFails.length) {
       const note = textFails.map((entry) => `${entry.vendor} text: ${entry.error || "failed"}`).join("; ");
       emailError = emailError ? `${emailError} ${note}` : note;

@@ -164,6 +164,9 @@ async function migrate() {
   await db`ALTER TABLE vendor_settings ADD COLUMN IF NOT EXISTS contact_name TEXT`;
   await db`ALTER TABLE vendor_settings ADD COLUMN IF NOT EXISTS phone TEXT`;
   await db`ALTER TABLE vendor_settings ADD COLUMN IF NOT EXISTS text_orders BOOLEAN`;
+  await db`UPDATE vendor_settings
+    SET phone = ${"2512232291"}, text_orders = TRUE
+    WHERE name = ${"City Produce"} AND (phone IS NULL OR phone = '')`;
   await db`CREATE TABLE IF NOT EXISTS price_lists (
     id TEXT PRIMARY KEY,
     vendor TEXT NOT NULL,

@@ -163,6 +163,7 @@ async function migrate() {
   )`;
   await db`ALTER TABLE vendor_settings ADD COLUMN IF NOT EXISTS contact_name TEXT`;
   await db`ALTER TABLE vendor_settings ADD COLUMN IF NOT EXISTS phone TEXT`;
+  await db`ALTER TABLE vendor_settings ADD COLUMN IF NOT EXISTS text_orders BOOLEAN`;
   await db`CREATE TABLE IF NOT EXISTS price_lists (
     id TEXT PRIMARY KEY,
     vendor TEXT NOT NULL,
@@ -477,11 +478,13 @@ export async function pgListSheets() {
 }
 
 function asVendorSetting(row: Record<string, unknown>): VendorSetting {
+  const name = String(row.name);
   return {
-    name: String(row.name),
+    name,
     contactName: row.contact_name ? String(row.contact_name) : "",
     phone: row.phone ? String(row.phone) : "",
     email: row.email ? String(row.email) : "",
+    textOrders: row.text_orders == null ? name === "City Produce" : Boolean(row.text_orders),
     uploadToken: String(row.upload_token),
   };
 }
@@ -524,15 +527,17 @@ export async function pgUpdateVendorSetting(name: string, patch: Partial<VendorS
     contactName: "",
     phone: "",
     email: "",
+    textOrders: name === "City Produce",
     uploadToken: crypto.randomUUID(),
   };
   const next = { ...current, ...patch, name };
-  await sql()`INSERT INTO vendor_settings (name, email, contact_name, phone, upload_token)
-    VALUES (${next.name}, ${next.email || ""}, ${next.contactName || ""}, ${next.phone || ""}, ${next.uploadToken})
+  await sql()`INSERT INTO vendor_settings (name, email, contact_name, phone, upload_token, text_orders)
+    VALUES (${next.name}, ${next.email || ""}, ${next.contactName || ""}, ${next.phone || ""}, ${next.uploadToken}, ${Boolean(next.textOrders)})
     ON CONFLICT (name) DO UPDATE SET
       email = EXCLUDED.email,
       contact_name = EXCLUDED.contact_name,
-      phone = EXCLUDED.phone`;
+      phone = EXCLUDED.phone,
+      text_orders = EXCLUDED.text_orders`;
   return next;
 }
 

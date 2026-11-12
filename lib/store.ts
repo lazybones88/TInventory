@@ -15,7 +15,7 @@ import type {
   VendorPriceList,
   VendorSetting,
 } from "./types";
-import { compareOrderingItems, itemVendor, orderVendor, prepCategoryForRecipe, VENDORS } from "./catalog";
+import { CITY_PRODUCE, compareOrderingItems, itemVendor, orderVendor, prepCategoryForRecipe, VENDORS } from "./catalog";
 import { comparePriceLists, matchPriceLines, normalizePriceName } from "./prices";
 import { qtyAmount } from "./qty";
 import { draftId } from "./shift";
@@ -428,11 +428,24 @@ function ensureVendorSettings(settings: VendorSetting[]) {
   for (const name of VENDORS) {
     const existing = byName.get(name);
     if (!existing) {
-      settings.push({ name, email: "", contactName: "", phone: "", uploadToken: crypto.randomUUID() });
+      settings.push({
+        name,
+        email: "",
+        contactName: "",
+        phone: "",
+        textOrders: name === CITY_PRODUCE,
+        uploadToken: crypto.randomUUID(),
+      });
       changed = true;
-    } else if (!existing.uploadToken) {
-      existing.uploadToken = crypto.randomUUID();
-      changed = true;
+    } else {
+      if (!existing.uploadToken) {
+        existing.uploadToken = crypto.randomUUID();
+        changed = true;
+      }
+      if (name === CITY_PRODUCE && existing.textOrders == null) {
+        existing.textOrders = true;
+        changed = true;
+      }
     }
   }
   return { changed };
@@ -457,6 +470,7 @@ export async function updateVendorSetting(name: string, patch: Partial<VendorSet
         contactName: "",
         phone: "",
         email: "",
+        textOrders: name === CITY_PRODUCE,
         uploadToken: crypto.randomUUID(),
         ...patch,
         name,

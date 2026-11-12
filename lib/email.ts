@@ -3,6 +3,7 @@ import { CITY_PRODUCE, groupByCategory, groupByVendor, itemVendor, orderVendor, 
 import { afterPrep, exceedsPar } from "./par";
 import { hasQty, qtyText } from "./qty";
 import { shiftLabel } from "./shift";
+import { sendVendorOrderText, wantsOrderText, type VendorTextResult } from "./sms";
 import type { Report, VendorSetting } from "./types";
 
 export function ownerEmail() {
@@ -37,8 +38,16 @@ function vendorPlans(report: Report, settings: VendorSetting[]) {
     .filter((group) => group.vendor !== UNASSIGNED_VENDOR)
     .map((group) => {
       const ordered = group.rows.filter((line) => hasQty(line.orderQty));
-      const email = settings.find((entry) => entry.name === group.vendor)?.email?.trim() || "";
-      return { vendor: group.vendor, email, ordered };
+      const setting = settings.find((entry) => entry.name === group.vendor);
+      const email = setting?.email?.trim() || "";
+      const phone = setting?.phone?.trim() || "";
+      return {
+        vendor: group.vendor,
+        email,
+        phone,
+        textOrders: wantsOrderText(group.vendor, setting),
+        ordered,
+      };
     });
 }
 
@@ -46,11 +55,19 @@ function vendorNotice(plans: ReturnType<typeof vendorPlans>) {
   if (!plans.length) return "";
   const emailed = plans.filter((plan) => plan.email && plan.ordered.length);
   const noEmail = plans.filter((plan) => !plan.email && plan.ordered.length);
+  const texted = plans.filter((plan) => plan.textOrders && plan.phone && plan.ordered.length);
   const parts: string[] = [];
   if (emailed.length) {
     parts.push(
       `<strong>Also emailed their own order:</strong> ${emailed
         .map((plan) => `${plan.vendor} (${plan.email})`)
+        .join(", ")}`
+    );
+  }
+  if (texted.length) {
+    parts.push(
+      `<strong>Also texted their order:</strong> ${texted
+        .map((plan) => `${plan.vendor} (${plan.phone})`)
         .join(", ")}`
     );
   }
@@ -298,25 +315,36 @@ export async function sendReportEmail(report: Report, settings: VendorSetting[] 
   const { subject, html } = formatReport(report, settings);
   const owner = await trySend(ownerEmail(), subject, html);
   const vendors: VendorMailResult[] = [];
+  const texts: VendorTextResult[] = [];
   for (const plan of vendorPlans(report, settings)) {
     if (!plan.ordered.length) {
       vendors.push({ vendor: plan.vendor, email: plan.email, sent: false, skipped: "nothing-ordered" });
+      if (plan.textOrders) {
+        texts.push({ vendor: plan.vendor, phone: plan.phone, sent: false, skipped: "nothing-ordered" });
+      }
       continue;
     }
     if (!plan.email) {
       vendors.push({ vendor: plan.vendor, email: "", sent: false, skipped: "no-email" });
-      continue;
+    } else {
+      const message = formatVendorOrder(report, plan.vendor, plan.ordered);
+      const result = await trySend(plan.email, message.subject, message.html);
+      vendors.push({
+        vendor: plan.vendor,
+        email: plan.email,
+        sent: result.sent,
+        error: result.sent ? undefined : result.error,
+      });
     }
-    const message = formatVendorOrder(report, plan.vendor, plan.ordered);
-    const result = await trySend(plan.email, message.subject, message.html);
-    vendors.push({
-      vendor: plan.vendor,
-      email: plan.email,
-      sent: result.sent,
-      error: result.sent ? undefined : result.error,
-    });
+    if (plan.textOrders) {
+      if (!plan.phone) {
+        texts.push({ vendor: plan.vendor, phone: "", sent: false, skipped: "no-phone" });
+      } else {
+        texts.push(await sendVendorOrderText({ vendor: plan.vendor, phone: plan.phone, report, lines: plan.ordered }));
+      }
+    }
   }
-  return { sent: owner.sent, error: owner.error, vendors };
+  return { sent: owner.sent, error: owner.error, vendors, texts };
 }
 
 export async function sendVendorPriceRequest(input: {

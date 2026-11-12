@@ -84,15 +84,22 @@ export async function POST(request: Request) {
 
   let emailError: string | undefined;
   let vendorEmails: Awaited<ReturnType<typeof sendReportEmail>>["vendors"] = [];
+  let vendorTexts: Awaited<ReturnType<typeof sendReportEmail>>["texts"] = [];
   try {
     const settings = report.type === "ordering" ? await listVendorSettings() : [];
     const result = await sendReportEmail(report, settings);
     report.emailed = result.sent;
     vendorEmails = result.vendors;
+    vendorTexts = result.texts;
     if (!result.sent) emailError = result.error;
     const vendorFails = result.vendors.filter((entry) => entry.email && !entry.sent && !entry.skipped);
     if (vendorFails.length) {
       const note = vendorFails.map((entry) => `${entry.vendor}: ${entry.error || "failed"}`).join("; ");
+      emailError = emailError ? `${emailError} ${note}` : note;
+    }
+    const textFails = result.texts.filter((entry) => !entry.sent && !entry.skipped);
+    if (textFails.length) {
+      const note = textFails.map((entry) => `${entry.vendor} text: ${entry.error || "failed"}`).join("; ");
       emailError = emailError ? `${emailError} ${note}` : note;
     }
   } catch (error) {
@@ -114,5 +121,6 @@ export async function POST(request: Request) {
     emailed: report.emailed,
     emailError,
     vendorEmails,
+    vendorTexts,
   });
 }

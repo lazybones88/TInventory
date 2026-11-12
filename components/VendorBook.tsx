@@ -9,10 +9,11 @@ type Draft = {
   contactName: string;
   phone: string;
   email: string;
+  textOrders: boolean;
 };
 
 function blank(): Draft {
-  return { name: "", contactName: "", phone: "", email: "" };
+  return { name: "", contactName: "", phone: "", email: "", textOrders: false };
 }
 
 function fromSetting(setting: VendorSetting): Draft {
@@ -21,6 +22,7 @@ function fromSetting(setting: VendorSetting): Draft {
     contactName: setting.contactName || "",
     phone: setting.phone || "",
     email: setting.email || "",
+    textOrders: Boolean(setting.textOrders),
   };
 }
 
@@ -61,10 +63,10 @@ export function VendorBook() {
     return [...house, ...extra];
   }, [settings]);
 
-  function patchDraft(name: string, field: keyof Draft, value: string) {
+  function patchDraft(name: string, field: keyof Draft, value: string | boolean) {
     setDrafts((prev) => ({
       ...prev,
-      [name]: { ...(prev[name] || { name, contactName: "", phone: "", email: "" }), [field]: value },
+      [name]: { ...(prev[name] || { name, contactName: "", phone: "", email: "", textOrders: false }), [field]: value },
     }));
   }
 
@@ -81,6 +83,7 @@ export function VendorBook() {
         contactName: draft.contactName,
         phone: draft.phone,
         email: draft.email,
+        textOrders: draft.textOrders,
       }),
     });
     const data = await res.json();
@@ -132,7 +135,8 @@ export function VendorBook() {
     <div>
       <p className="mb-4 max-w-3xl text-sm text-muted">
         Contact book for each house. Send one vendor at a time. The owner gets that house&apos;s
-        inventory, and if they have an email they also get only their own order.
+        inventory. If they have an email they get their order. Turn on texting and add a phone — City
+        Produce / Coastal Produce is already set to text when you send.
       </p>
 
       <div className="card mb-5 p-4">
@@ -175,6 +179,15 @@ export function VendorBook() {
               onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
               placeholder="orders@vendor.com"
             />
+          </label>
+          <label className="flex items-start gap-2 text-sm md:col-span-2">
+            <input
+              className="mt-1"
+              type="checkbox"
+              checked={addForm.textOrders}
+              onChange={(e) => setAddForm({ ...addForm, textOrders: e.target.checked })}
+            />
+            <span>Text this number when we send their order</span>
           </label>
         </div>
         <button className="btn btn-wine mt-4" type="button" disabled={Boolean(busy)} onClick={() => void addVendor()}>
@@ -241,6 +254,18 @@ export function VendorBook() {
                       Email {draft.email}
                     </a>
                   ) : null}
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    className="mt-1"
+                    type="checkbox"
+                    checked={draft.textOrders}
+                    onChange={(e) => patchDraft(setting.name, "textOrders", e.target.checked)}
+                  />
+                  <span>
+                    Text this number when we send their order
+                    {setting.name === "City Produce" ? " — for Coastal Produce" : ""}
+                  </span>
                 </label>
                 <button
                   className="btn btn-gold"

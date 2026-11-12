@@ -5,10 +5,11 @@ import { deleteVendorSetting, listVendorSettings, updateVendorSetting } from "@/
 export const dynamic = "force-dynamic";
 
 function contactPatch(body: Record<string, unknown>) {
-  const patch: { email?: string; contactName?: string; phone?: string } = {};
+  const patch: { email?: string; contactName?: string; phone?: string; textOrders?: boolean } = {};
   if (typeof body.email === "string") patch.email = body.email.trim();
   if (typeof body.contactName === "string") patch.contactName = body.contactName.trim();
   if (typeof body.phone === "string") patch.phone = body.phone.trim();
+  if (typeof body.textOrders === "boolean") patch.textOrders = body.textOrders;
   return patch;
 }
 

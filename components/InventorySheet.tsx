@@ -419,18 +419,32 @@ export function InventorySheet({
     const vendorSent = (data.vendorEmails || [])
       .filter((entry: { sent?: boolean; vendor?: string }) => entry.sent && entry.vendor)
       .map((entry: { vendor: string }) => entry.vendor);
+    const texts = (data.vendorTexts || []) as {
+      sent?: boolean;
+      vendor?: string;
+      phone?: string;
+      skipped?: string;
+      error?: string;
+    }[];
+    const texted = texts.filter((entry) => entry.sent && entry.vendor).map((entry) => entry.vendor as string);
+    const textNeedsPhone = texts.some((entry) => entry.skipped === "no-phone");
+    const textNeedsSetup = texts.some((entry) => entry.skipped === "not-configured");
     let text = "";
+    const extra =
+      (texted.length ? ` Texted ${texted.join(", ")}.` : "") +
+      (textNeedsPhone ? " Add their phone in Admin → Vendor contacts to text the order." : "") +
+      (textNeedsSetup ? " Add Twilio on Vercel to auto-text the order." : "");
     if (data.emailed) {
       const vendorFail = data.emailError ? ` ${data.emailError}` : "";
       text = house
-        ? `Sent ${house} inventory for ${when}. The owner got that sheet${vendorSent.length ? `, and ${vendorSent.join(", ")} got their order` : ""}.${vendorFail}`
+        ? `Sent ${house} inventory for ${when}. The owner got that sheet${vendorSent.length ? `, and ${vendorSent.join(", ")} got their order` : ""}.${extra}${vendorFail}`
         : vendorSent.length
-          ? `Saved and emailed the owner, plus ${vendorSent.join(", ")}, for ${when}.${vendorFail}`
-          : `Saved, stored, and emailed to the owner for ${when}. Open Records to see it anytime.${vendorFail}`;
+          ? `Saved and emailed the owner, plus ${vendorSent.join(", ")}, for ${when}.${extra}${vendorFail}`
+          : `Saved, stored, and emailed to the owner for ${when}. Open Records to see it anytime.${extra}${vendorFail}`;
     } else {
       text = house
-        ? `Saved ${house} inventory for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.`
-        : `Saved and stored for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.`;
+        ? `Saved ${house} inventory for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.${extra}`
+        : `Saved and stored for ${when}. Email is not set up yet — add SMTP on Vercel so it goes to fairhopefood@ymail.com.${extra}`;
     }
     setStatus(text);
     setNotice({ title: house ? `Sent ${house}` : "Sent", text, kind: "ok" });

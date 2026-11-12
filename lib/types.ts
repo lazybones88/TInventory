@@ -92,6 +92,7 @@ export interface VendorSetting {
   contactName?: string;
   phone?: string;
   email?: string;
+  textOrders?: boolean;
   uploadToken: string;
 }
 

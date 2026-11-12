@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { VENDORS } from "@/lib/catalog";
+import { fakeCityProduceSms } from "@/lib/fake-produce-text";
 import { openSms } from "@/lib/sms-link";
 import type { VendorSetting } from "@/lib/types";
 
@@ -135,11 +136,9 @@ export function VendorBook() {
       setStatus("Save a phone number first.");
       return;
     }
-    openSms(
-      phone,
-      `Tamara's Downtown test: ${name} order texts are working. You will get the real order on this number when we send.`
-    );
-    setStatus(`Messages should open with a test for ${name}. Send it from this phone.`);
+    const fake = fakeCityProduceSms(phone);
+    openSms(fake.phone, fake.body);
+    setStatus(`Messages should open with a fake ${name} order. Send it from this phone. No email was sent.`);
   }
 
   async function addVendor() {
@@ -318,14 +317,21 @@ export function VendorBook() {
                     {busy === setting.name ? "Saving…" : "Save contact"}
                   </button>
                   {draft.textOrders ? (
-                    <button
-                      className="btn btn-wine"
-                      type="button"
-                      disabled={busy === setting.name || testing === setting.name || !draft.phone.trim()}
-                      onClick={() => void testText(setting.name)}
-                    >
-                      {testing === setting.name ? "Texting…" : "Send test text"}
-                    </button>
+                    <>
+                      <button
+                        className="btn btn-wine"
+                        type="button"
+                        disabled={busy === setting.name || testing === setting.name || !draft.phone.trim()}
+                        onClick={() => void testText(setting.name)}
+                      >
+                        {testing === setting.name ? "Texting…" : "Text a fake order"}
+                      </button>
+                      {setting.name === "City Produce" ? (
+                        <a className="btn btn-ghost" href="/text-test">
+                          Open fake order page
+                        </a>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               </div>
